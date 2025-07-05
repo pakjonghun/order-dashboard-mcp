@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from './components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from './components/ui/card';
 import { Input } from './components/ui/input';
@@ -17,10 +18,10 @@ const users: User[] = [
   { id: '3', name: 'Alice Kim' },
 ];
 
-function App() {
+function Dashboard() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start gap-10 py-12 bg-background">
-      <Card className="w-full max-w-2xl">
+    <div className="flex flex-col items-center gap-10 w-full max-w-2xl">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle>사용자 검색</CardTitle>
         </CardHeader>
@@ -31,8 +32,7 @@ function App() {
           </div>
         </CardContent>
       </Card>
-
-      <Card className="w-full max-w-2xl">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle>사용자 목록</CardTitle>
         </CardHeader>
@@ -55,6 +55,27 @@ function App() {
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function App() {
+  const [dashboards, setDashboards] = useState([0]);
+
+  const addDashboard = () => {
+    setDashboards((prev) => [...prev, prev.length]);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center py-12 bg-background gap-6">
+      <Button onClick={addDashboard} className="mb-4 self-start ml-8">
+        + 화면 분할
+      </Button>
+      <div className={`flex flex-1 w-full justify-center items-start gap-8`}>
+        {dashboards.map((_, idx) => (
+          <Dashboard key={idx} />
+        ))}
+      </div>
     </div>
   );
 }
