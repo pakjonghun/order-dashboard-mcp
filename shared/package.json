@@ -1,0 +1,12 @@
+{
+  "name": "@dashboard-app/shared",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

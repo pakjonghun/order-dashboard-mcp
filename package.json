@@ -1,0 +1,26 @@
+{
+  "name": "dashboard-app",
+  "private": true,
+  "main": "main/dist/index.js",
+  "workspaces": [
+    "main",
+    "renderer",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run build:shared && npm run build:main && concurrently \"npm run dev:main\" \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:main": "npm run dev --workspace=main",
+    "dev:renderer": "npm run dev --workspace=renderer",
+    "dev:electron": "NODE_ENV=development electron .",
+    "build": "npm run build --workspaces",
+    "build:main": "npm run build --workspace=main",
+    "build:renderer": "npm run build --workspace=renderer",
+    "build:shared": "npm run build --workspace=shared",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^27.0.0",
+    "typescript": "^5.3.3"
+  }
+}
