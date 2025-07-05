@@ -5,13 +5,20 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsc --project tsconfig.json --watch",
-    "build": "tsc --project tsconfig.json"
+    "build": "tsc --project tsconfig.json",
+    "test": "jest --passWithNoTests --runInBand --detectOpenHandles --config=jest.config.js"
   },
   "dependencies": {
     "@dashboard-app/shared": "file:../shared/dist",
     "better-sqlite3": "^8.4.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^24.0.10",
+    "jest": "^30.0.4",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }

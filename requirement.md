@@ -1,222 +1,94 @@
-1단계 일렉트론 초기세팅
+2단계 main process 확장 db 설치
 
-🟣 Electron-SQL Desktop App Scaffold Prompt — Step 1 (Monorepo + SQLite)
+🟣 Electron-SQL Desktop App Scaffold Prompt — Step 2 (Main 프로세스 확장 + DB 연동, ESM + Jest 테스트)
 
-당신은 Electron 기반 SQL 분석 데스크탑 앱을 scaffold하는 숙련된 프로젝트 생성기입니다.  
-아래 조건을 모두 반영하여 sql-desktop-app/ 프로젝트의 초기 구조를 완성하세요.  
-출력은 항상 경로:<<<코드>>> 형식이며, 중첩된 코드블록(백틱)은 사용하지 말고 <<< >>> 만 사용하세요.
-
-────────────────────────────────────────────
-📁 전체 디렉토리 구조
-
-sql-desktop-app/
-├── main/ ← Electron Main (Node.js, CommonJS, better-sqlite3)
-│ ├── package.json
-│ ├── tsconfig.json
-│ └── src/index.ts
-├── renderer/ ← React Renderer (Vite, Tailwind, shadcn/ui)
-│ ├── package.json
-│ ├── tsconfig.json
-│ ├── vite.config.ts
-│ └── src/main.tsx
-├── shared/ ← 공통 타입 및 유틸 (CJS 빌드 모듈)
-│ ├── package.json
-│ ├── tsconfig.json
-│ └── src/{types.ts, utils.ts, index.ts}
-├── package.json ← 루트 워크스페이스 및 스크립트 정의
-├── tsconfig.json ← 루트 TS paths 설정
-├── .gitignore
-└── electron.config.ts
+당신은 Electron 기반 SQL 분석 앱의 메인 프로세스를 확장하는 고급 scaffold 생성기입니다.  
+아래 조건에 맞춰 main 디렉토리를 확장하여 SQLite 기반 데이터 저장 및 쿼리 기능을 구현하고, Jest 기반 단위 테스트를 추가하세요.
 
 ────────────────────────────────────────────
-🛠 기술 조건 요약
+🎯 목표
 
-• Electron 27 + CommonJS (main)
-• React 19 + Vite 7 (renderer)
-• TailwindCSS + shadcn/ui
-• SQLite (better-sqlite3)
-• Monorepo 구조: main, renderer, shared 분리
-• 공통 모듈 경로는 @shared/\* 사용
-• Vite의 별도 alias 설정 없이 tsconfig 기반으로 연결
-• npm run dev 실행 시 Vite(3000포트) + Electron 동시 실행
+• SQLite 연결 모듈 (`main/src/db/database.ts`) 생성  
+• 초기 테이블 정의 SQL 파일 (`main/src/db/schema.sql`) 추가  
+• 쿼리 함수(`getAllUsers`) 구현 및 shared 타입 사용  
+• 메인 실행 시 DB 초기화 및 테스트 출력  
+• Jest 기반 단위 테스트 파일 (`main/src/test/db.test.ts`) 추가  
+• DB 파일은 프로젝트 루트(app.db)에 생성됨
 
 ────────────────────────────────────────────
-🧩 루트 설정
+📁 생성/수정할 파일 구조
 
-sql-desktop-app/package.json:
-<<<json
-{
-"name": "sql-desktop-app",
-"private": true,
-"main": "main/dist/index.js",
-"workspaces": ["main", "renderer", "shared"],
-"scripts": {
-"dev": "npm run build:shared && npm run build:main && concurrently \"npm run dev:main\" \"npm run dev:renderer\" \"npm run dev:electron\"",
-"dev:main": "npm run dev --workspace=main",
-"dev:renderer": "npm run dev --workspace=renderer",
-"dev:electron": "NODE_ENV=development electron .",
-"build": "npm run build --workspaces",
-"build:main": "npm run build --workspace=main",
-"build:renderer": "npm run build --workspace=renderer",
-"build:shared": "npm run build --workspace=shared",
-"start": "electron ."
-},
-"devDependencies": {
-"concurrently": "^8.2.2",
-"electron": "^27.0.0",
-"typescript": "^5.3.3"
-}
-}
+main/
+├── src/
+│ ├── db/
+│ │ ├── database.ts ← SQLite 연결 및 쿼리 (ESM)
+│ │ └── schema.sql ← 초기 테이블 정의
+│ ├── test/
+│ │ └── db.test.ts ← Jest 기반 단위 테스트
+│ └── index.ts ← Electron 메인 (수정됨)
 
-> > >
-
-sql-desktop-app/tsconfig.json:
-<<<json
-{
-"compilerOptions": {
-"baseUrl": ".",
-"paths": {
-"@shared/_": ["shared/src/_"]
-}
-}
-}
-
-> > >
-
-sql-desktop-app/.gitignore:
-<<<text
-node_modules/
-dist/
-.env
-.env.\*
-.DS_Store
-
-> > >
-
-sql-desktop-app/electron.config.ts:
+────────────────────────────────────────────
+📦 main/src/db/database.ts:
 <<<typescript
-// electron.config.ts
-export default {
-main: './main/src/index.ts',
-preload: '',
-renderer: 'http://localhost:3000',
-};
+import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
+import type { User } from '../../../shared/src/types';
+
+const dbFile = path.join(**dirname, '../../../app.db');
+const schemaPath = path.join(**dirname, './schema.sql');
+
+const db = new Database(dbFile);
+
+// schema.sql 실행
+const schema = fs.readFileSync(schemaPath, 'utf-8');
+db.exec(schema);
+
+// 사용자 전체 조회 쿼리
+function getAllUsers(): User[] {
+return db.prepare('SELECT \* FROM users').all() as User[];
+}
+
+export { db, getAllUsers };
 
 > > >
 
 ────────────────────────────────────────────
-📦 shared 설정 (공통 타입/유틸 모듈)
-
-shared/package.json:
-<<<json
-{
-"name": "@sql-desktop-app/shared",
-"version": "0.1.0",
-"main": "dist/index.js",
-"type": "commonjs",
-"scripts": {
-"build": "tsc --project tsconfig.json"
-},
-"devDependencies": {
-"typescript": "^5.3.3"
-}
-}
-
-> > >
-
-shared/tsconfig.json:
-<<<json
-{
-"compilerOptions": {
-"target": "ES2020",
-"module": "CommonJS",
-"outDir": "dist",
-"strict": true,
-"esModuleInterop": true,
-"declaration": true,
-"declarationDir": "dist"
-},
-"include": ["src"]
-}
-
-> > >
-
-shared/src/index.ts:
-<<<typescript
-export _ from './types';
-export _ from './utils';
-
-> > >
-
-shared/src/types.ts:
-<<<typescript
-export interface User {
-id: string;
-name: string;
-}
-
-> > >
-
-shared/src/utils.ts:
-<<<typescript
-export function formatDate(date: Date): string {
-return date.toISOString().split('T')[0];
-}
+📦 main/src/db/schema.sql:
+<<<sql
+CREATE TABLE IF NOT EXISTS users (
+id TEXT PRIMARY KEY,
+name TEXT NOT NULL
+);
 
 > > >
 
 ────────────────────────────────────────────
-⚙ main 설정 (Electron CJS 프로세스)
-
-main/package.json:
-<<<json
-{
-"name": "@sql-desktop-app/main",
-"version": "0.1.0",
-"main": "dist/index.js",
-"type": "commonjs",
-"scripts": {
-"dev": "tsc --project tsconfig.json --watch",
-"build": "tsc --project tsconfig.json"
-},
-"dependencies": {
-"@sql-desktop-app/shared": "file:../shared/dist",
-"better-sqlite3": "^8.4.0"
-},
-"devDependencies": {
-"@types/node": "^20.5.7",
-"typescript": "^5.3.3"
-}
-}
-
-> > >
-
-main/tsconfig.json:
-<<<json
-{
-"compilerOptions": {
-"target": "ES2020",
-"module": "CommonJS",
-"baseUrl": ".",
-"paths": {
-"@shared/_": ["../shared/src/_"]
-},
-"outDir": "dist",
-"rootDir": "src",
-"strict": true,
-"esModuleInterop": true,
-"typeRoots": ["../shared/dist", "./node_modules/@types"]
-},
-"include": ["src"]
-}
-
-> > >
-
-main/src/index.ts:
+📦 main/src/test/db.test.ts:
 <<<typescript
-const { app, BrowserWindow } = require('electron');
-const path = require('path');
-const { formatDate } = require('@sql-desktop-app/shared');
+import { getAllUsers } from '../db/database';
+
+describe('DB User Query', () => {
+it('should return an array (users)', () => {
+const users = getAllUsers();
+expect(Array.isArray(users)).toBe(true);
+});
+
+it('should return empty array if no users', () => {
+const users = getAllUsers();
+expect(users.length).toBe(0);
+});
+});
+
+> > >
+
+────────────────────────────────────────────
+📦 main/src/index.ts (기존 파일 수정):
+<<<typescript
+import { app, BrowserWindow } from 'electron';
+import path from 'path';
+import { formatDate } from '@shared/utils';
+import { getAllUsers } from './db/database';
 
 function createWindow() {
 const win = new BrowserWindow({
@@ -228,11 +100,10 @@ contextIsolation: false,
 },
 });
 
-// 개발 환경: Vite dev 서버(3000포트)로 로드
 win.loadURL('http://localhost:3000');
 
-// shared 모듈 사용 예시
-console.log('Today is:', formatDate(new Date()));
+console.log('[Electron] App started at', formatDate(new Date()));
+console.log('[Electron] Users in DB:', getAllUsers());
 }
 
 app.whenReady().then(createWindow);
@@ -244,135 +115,16 @@ if (process.platform !== 'darwin') app.quit();
 > > >
 
 ────────────────────────────────────────────
-⚛ renderer 설정 (React + Vite + Tailwind + shadcn)
+🧪 테스트 실행 방법 (Jest)
 
-renderer/package.json:
-<<<json
-{
-"name": "renderer",
-"private": true,
-"version": "0.0.0",
-"type": "module",
-"scripts": {
-"dev": "vite",
-"build": "tsc -b && vite build",
-"lint": "eslint .",
-"preview": "vite preview"
-},
-"dependencies": {
-"@radix-ui/react-slot": "^1.2.3",
-"@tailwindcss/vite": "^4.1.11",
-"class-variance-authority": "^0.7.1",
-"clsx": "^2.1.1",
-"lucide-react": "^0.525.0",
-"react": "^19.1.0",
-"react-dom": "^19.1.0",
-"tailwind-merge": "^3.3.1",
-"tailwindcss": "^4.1.11"
-},
-"devDependencies": {
-"@eslint/js": "^9.29.0",
-"@types/node": "^24.0.10",
-"@types/react": "^19.1.8",
-"@types/react-dom": "^19.1.6",
-"@vitejs/plugin-react": "^4.5.2",
-"eslint": "^9.29.0",
-"eslint-plugin-react-hooks": "^5.2.0",
-"eslint-plugin-react-refresh": "^0.4.20",
-"globals": "^16.2.0",
-"tw-animate-css": "^1.3.5",
-"typescript": "~5.8.3",
-"typescript-eslint": "^8.34.1",
-"vite": "^7.0.0"
-}
-}
-
-> > >
-
-renderer/tsconfig.json:
-<<<json
-{
-"compilerOptions": {
-"target": "ES2020",
-"module": "ESNext",
-"baseUrl": ".",
-"paths": {
-"@shared/_": ["../shared/src/_"]
-},
-"jsx": "react-jsx",
-"strict": true
-},
-"include": ["src", "../shared/src"]
-}
-
-> > >
-
-renderer/vite.config.ts:
-<<<typescript
-import path from 'path';
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
-
-// https://vite.dev/config/
-export default defineConfig({
-plugins: [react(), tailwindcss()],
-server: {
-port: 3000,
-},
-resolve: {
-alias: {
-'@': path.resolve(\_\_dirname, './src'),
-},
-},
-});
-
-> > >
-
-renderer/src/main.tsx:
-<<<typescript
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { formatDate } from "@shared/utils";
-
-ReactDOM.createRoot(document.getElementById("root")!).render(
-<React.StrictMode>
-
-<div>Hello from Renderer - {formatDate(new Date())}</div>
-</React.StrictMode>
-);
-
-> > >
+1. `npm install` (최초 1회)
+2. `npm test` ← Jest로 단위 테스트 실행
 
 ────────────────────────────────────────────
 ✅ 완료 조건
 
-- npm install && npm run dev 실행 시 Electron + Vite 앱 정상 실행
-- Vite 개발 서버가 3000포트에서 실행되고 Electron이 해당 포트를 바라봄
-- main/renderer 모두에서 @shared/\* 경로로 타입/유틸 가져오기 가능
-- Tailwind + shadcn/ui 세팅 완료
-- 공통 모듈은 CommonJS 빌드로 CJS/ESM 환경 모두 호환됨
-- shared 모듈이 라이브러리처럼 main에서 사용 가능
-- TypeScript 실시간 컴파일로 개발 효율성 극대화
-
-────────────────────────────────────────────
-🎯 목표 요약
-
-이 프롬프트의 목적은 SQLite 기반 자연어 분석 앱을 위한 **안정적이고 유지보수 가능한 모노레포 구조를 scaffold**하는 것입니다.  
-main/renderer/shared의 독립성과 상호작용을 모두 고려한 세팅을 완료하세요.
-
-### 🚀 실행 순서
-
-1. npm install - 의존성 설치
-2. npm run build:shared - shared 라이브러리 빌드
-3. npm run build:main - main 프로세스 빌드
-4. npm run dev - 개발 환경 실행 (Vite 3000포트 + Electron)
-
-### 🔧 핵심 특징
-
-- **모노레포 구조**: main, renderer, shared 분리
-- **실시간 개발**: TypeScript watch 모드 + Vite HMR
-- **라이브러리 공유**: shared 모듈을 main/renderer에서 공통 사용
-- **안정적 빌드**: 컴파일된 JavaScript로 Electron 실행
-
-일렉트론 초기 프롬프트를 위와 같이 바꾸었어 실제로 설치해보면서 가장 적합했어
+- `main/src/db/database.ts` 내 SQLite 연결 및 초기화 로직 완성 (ESM, 타입 안전)
+- `main/src/test/db.test.ts`에서 Jest 기반 쿼리 테스트 및 검증 코드 작성
+- `main/index.ts`에서 `getAllUsers()` 결과 출력
+- shared의 타입이나 유틸을 문제없이 사용할 수 있음
+- TypeScript + ESM(import/export) 기반 구조를 유지하며, Jest로 테스트 가능

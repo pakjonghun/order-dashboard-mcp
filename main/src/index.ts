@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { formatDate } from '@dashboard-app/shared';
 import { User } from '@shared/types';
+import { getAllUsers } from './db/database';
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -13,7 +14,9 @@ function createWindow() {
   });
 
   win.loadURL('http://localhost:3000');
-  console.log('Today is:', formatDate(new Date()));
+
+  console.log('[Electron] App started at', formatDate(new Date()));
+  console.log('[Electron] Users in DB:', getAllUsers());
 }
 
 app.whenReady().then(createWindow);
