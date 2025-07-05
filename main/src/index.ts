@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { formatDate } from '@dashboard-app/shared';
+import { User } from '@shared/types';
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -11,10 +12,7 @@ function createWindow() {
     },
   });
 
-  // 개발 환경: Vite dev 서버(3000포트)로 로드
   win.loadURL('http://localhost:3000');
-
-  // shared 모듈 사용 예시
   console.log('Today is:', formatDate(new Date()));
 }
 
@@ -23,3 +21,10 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+function abc() {
+  const user: User = {
+    id: '1',
+    name: 'John Doe',
+  };
+}

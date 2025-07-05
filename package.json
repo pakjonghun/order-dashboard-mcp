@@ -8,7 +8,7 @@
     "shared"
   ],
   "scripts": {
-    "dev": "npm run build:shared && npm run build:main && concurrently \"npm run dev:main\" \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev": "npm run build:shared && npm run build:main && concurrently \"npm run dev:renderer\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
     "dev:main": "npm run dev --workspace=main",
     "dev:renderer": "npm run dev --workspace=renderer",
     "dev:electron": "NODE_ENV=development electron .",
@@ -21,6 +21,7 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "electron": "^27.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "wait-on": "^7.0.1"
   }
 }

@@ -7,7 +7,6 @@
       "@shared/*": ["../shared/src/*"]
     },
     "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "typeRoots": ["../shared/dist", "./node_modules/@types"]
