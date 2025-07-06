@@ -14,6 +14,7 @@ import { type UploadResponse, type OrderRow } from '@shared/types';
 import { IPC_CHANNELS, DB_COLUMNS } from '@shared/constants';
 import { UploadModal } from './components/button/upload-modal';
 import { ResetButton } from './components/button/reset-button';
+import { X } from 'lucide-react';
 
 // Dashboard별 상태 타입
 interface DashboardState {
@@ -28,16 +29,22 @@ interface DashboardProps {
   state: DashboardState;
   setQuery: (query: string) => void;
   search: (query?: string) => Promise<void>;
+  onDelete: () => void;
 }
 
-function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
+function Dashboard({ dashboardId, state, setQuery, search, onDelete }: DashboardProps) {
   const { query, result, loading } = state;
 
   return (
-    <div className="flex flex-col items-center gap-10 w-full max-w-2xl">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>주문 데이터 검색 - Dashboard {dashboardId + 1}</CardTitle>
+    <div className="flex flex-col w-full min-w-[600px] flex-1">
+      <Card className="w-full rounded-b-none border-b-0">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle>주문 데이터 검색 - Dashboard {dashboardId + 1}</CardTitle>
+            <Button variant="ghost" size="sm" onClick={onDelete} className="h-8 w-8 p-0">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form
@@ -60,67 +67,69 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
           </form>
         </CardContent>
       </Card>
-      <Card className="w-full">
-        <CardHeader>
+      <Card className="w-full rounded-t-none">
+        <CardHeader className="pb-4">
           <CardTitle>검색 결과</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {Array.isArray(result) && result.length > 0 && 'orderNumber' in result[0] ? (
-                  // OrderRow 타입인 경우 동적으로 컬럼 생성
-                  DB_COLUMNS.map((column) => <TableHead key={column}>{column}</TableHead>)
-                ) : (
-                  // 기타 JSON 결과인 경우 기본 컬럼
-                  <>
-                    <TableHead>키</TableHead>
-                    <TableHead>값</TableHead>
-                  </>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.isArray(result) && result.length > 0 ? (
-                result.map((row, idx) => {
-                  if ('orderNumber' in row) {
-                    // OrderRow 타입인 경우
-                    return (
-                      <TableRow key={idx}>
-                        {DB_COLUMNS.map((column) => (
-                          <TableCell key={column}>
-                            {String(row[column as keyof OrderRow] || '')}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    );
-                  } else {
-                    // 기타 JSON 결과(동적 key-value)
-                    return (
-                      <TableRow key={idx}>
-                        <TableCell colSpan={2}>
-                          {Object.entries(row).map(([k, v]) => (
-                            <div key={k}>
-                              <b>{k}:</b> {String(v)}
-                            </div>
-                          ))}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }
-                })
-              ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={DB_COLUMNS.length}
-                    className="text-center text-muted-foreground"
-                  >
-                    결과 없음
-                  </TableCell>
+                  {Array.isArray(result) && result.length > 0 && 'orderNumber' in result[0] ? (
+                    // OrderRow 타입인 경우 동적으로 컬럼 생성
+                    DB_COLUMNS.map((column) => <TableHead key={column}>{column}</TableHead>)
+                  ) : (
+                    // 기타 JSON 결과인 경우 기본 컬럼
+                    <>
+                      <TableHead>키</TableHead>
+                      <TableHead>값</TableHead>
+                    </>
+                  )}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {Array.isArray(result) && result.length > 0 ? (
+                  result.map((row, idx) => {
+                    if ('orderNumber' in row) {
+                      // OrderRow 타입인 경우
+                      return (
+                        <TableRow key={idx}>
+                          {DB_COLUMNS.map((column) => (
+                            <TableCell key={column}>
+                              {String(row[column as keyof OrderRow] || '')}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    } else {
+                      // 기타 JSON 결과(동적 key-value)
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell colSpan={2}>
+                            {Object.entries(row).map(([k, v]) => (
+                              <div key={k}>
+                                <b>{k}:</b> {String(v)}
+                              </div>
+                            ))}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={DB_COLUMNS.length}
+                      className="text-center text-muted-foreground"
+                    >
+                      결과 없음
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -152,6 +161,15 @@ function App() {
       ...prev,
       [newId]: { query: '', result: [], loading: false },
     }));
+  };
+
+  const deleteDashboard = (dashboardId: number) => {
+    setDashboards((prev) => prev.filter((id) => id !== dashboardId));
+    setDashboardStates((prev) => {
+      const newStates = { ...prev };
+      delete newStates[dashboardId];
+      return newStates;
+    });
   };
 
   // Dashboard별 상태 업데이트 함수들
@@ -217,7 +235,7 @@ function App() {
         <UploadModal onUpload={handleUploadResult} />
         <ResetButton onResetSuccess={handleResetSuccess} />
       </div>
-      <div className={`flex flex-1 w-full justify-center items-start gap-8`}>
+      <div className="flex flex-wrap justify-center items-start gap-8 w-full px-8">
         {dashboards.map((dashboardId) => (
           <Dashboard
             key={dashboardId}
@@ -225,6 +243,7 @@ function App() {
             state={dashboardStates[dashboardId]}
             setQuery={(query) => setQuery(dashboardId, query)}
             search={(query) => search(dashboardId, query)}
+            onDelete={() => deleteDashboard(dashboardId)}
           />
         ))}
       </div>
