@@ -2,9 +2,11 @@ import { app, BrowserWindow } from 'electron';
 import { formatDate } from '@dashboard-app/shared';
 import { User } from '@shared/types';
 import { getAllUsers } from './db/database';
+import './config/env';
 import './handlers/queryHandler';
 import './handlers/uploadHandler';
 import './handlers/resetHandler';
+import './mcp/handler'; // MCP 핸들러 추가
 import * as path from 'path';
 
 function createWindow() {

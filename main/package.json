@@ -10,8 +10,10 @@
     "rebuild": "electron-rebuild"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.56.0",
     "@dashboard-app/shared": "file:../shared/dist",
     "better-sqlite3": "^8.4.0",
+    "dotenv": "^16.3.1",
     "electron-rebuild": "^3.2.9"
   },
   "devDependencies": {
