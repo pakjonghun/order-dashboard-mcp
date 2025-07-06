@@ -4,6 +4,7 @@ import { User } from '@shared/types';
 import { getAllUsers } from './db/database';
 import './handlers/queryHandler';
 import './handlers/uploadHandler';
+import './handlers/resetHandler';
 import * as path from 'path';
 
 function createWindow() {

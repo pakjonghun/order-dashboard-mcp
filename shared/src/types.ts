@@ -36,3 +36,18 @@ export interface ParsedExcelData {
   columns: string[];
   rows: Record<string, unknown>[];
 }
+
+export interface ResetRequest {
+  // 확장 가능성을 위해 비워둠
+}
+
+export interface ResetSuccessResponse {
+  success: true;
+}
+
+export interface ResetErrorResponse {
+  success: false;
+  error: string;
+}
+
+export type ResetResponse = ResetSuccessResponse | ResetErrorResponse;
