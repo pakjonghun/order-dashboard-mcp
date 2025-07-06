@@ -10,17 +10,22 @@ import {
   TableHead,
   TableCell,
 } from './components/ui/table';
-import { type UploadResponse, type OrderRow } from '@shared/types';
+import { type UploadResponse, type OrderRow, type SearchResponse } from '@shared/types';
 import { IPC_CHANNELS, DB_COLUMNS } from '@shared/constants';
 import { UploadModal } from './components/button/upload-modal';
 import { ResetButton } from './components/button/reset-button';
-import { X } from 'lucide-react';
+import { X, AlertCircle, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Dashboard별 상태 타입
 interface DashboardState {
   query: string;
   result: (OrderRow | Record<string, unknown>)[];
   loading: boolean;
+  error?: string;
+  suggestion?: string;
+  executedSql?: string;
+  llmMessage?: string; // LLM의 전체 응답 메시지 추가
 }
 
 // Dashboard 컴포넌트에 props 추가
@@ -33,7 +38,7 @@ interface DashboardProps {
 }
 
 function Dashboard({ dashboardId, state, setQuery, search, onDelete }: DashboardProps) {
-  const { query, result, loading } = state;
+  const { query, result, loading, error, suggestion, executedSql, llmMessage } = state;
 
   return (
     <div className="flex flex-col w-full min-w-[600px] flex-1">
@@ -41,7 +46,12 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle>주문 데이터 검색 - Dashboard {dashboardId + 1}</CardTitle>
-            <Button variant="ghost" size="sm" onClick={onDelete} className="h-8 w-8 p-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDelete}
+              className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -72,6 +82,40 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
           <CardTitle>검색 결과</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* LLM 메시지 표시 (추가 정보가 필요한 경우) */}
+          {llmMessage && !executedSql && (
+            <Alert className="mb-4 border-blue-200 bg-blue-50">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertDescription>
+                <div className="text-sm text-blue-800 whitespace-pre-wrap">{llmMessage}</div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 에러 메시지 표시 */}
+          {error && (
+            <Alert className="mb-4 border-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="font-medium text-destructive">{error}</div>
+                {suggestion && (
+                  <div className="mt-2 text-sm text-muted-foreground">💡 {suggestion}</div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 실행된 SQL 표시 */}
+          {executedSql && (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <div className="text-sm font-mono bg-muted p-2 rounded">{executedSql}</div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 결과 테이블 */}
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -123,7 +167,7 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
                       colSpan={DB_COLUMNS.length}
                       className="text-center text-muted-foreground"
                     >
-                      결과 없음
+                      {error ? '검색 결과 없음' : '결과 없음'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -137,14 +181,11 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
 }
 
 // Dashboard별 검색 함수 분리
-async function searchDashboard(query: string): Promise<(OrderRow | Record<string, unknown>)[]> {
+async function searchDashboard(query: string): Promise<SearchResponse> {
   const ipcRenderer = window.ipcRenderer;
   if (!ipcRenderer) throw new Error('ipcRenderer not found');
   // MCP 서버 IPC 채널로 자연어 질의
-  return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, query)) as (
-    | OrderRow
-    | Record<string, unknown>
-  )[];
+  return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, query)) as SearchResponse;
 }
 
 function App() {
@@ -176,29 +217,54 @@ function App() {
   const setQuery = (dashboardId: number, query: string) => {
     setDashboardStates((prev) => ({
       ...prev,
-      [dashboardId]: { ...prev[dashboardId], query },
+      [dashboardId]: { ...prev[dashboardId], query, error: undefined, suggestion: undefined },
     }));
   };
 
   const search = async (dashboardId: number, query?: string) => {
+    const currentQuery = query || dashboardStates[dashboardId]?.query || '';
+    if (!currentQuery.trim()) return;
+
+    // 로딩 상태 설정
     setDashboardStates((prev) => ({
       ...prev,
-      [dashboardId]: { ...prev[dashboardId], loading: true },
+      [dashboardId]: {
+        ...prev[dashboardId],
+        loading: true,
+        error: undefined,
+        suggestion: undefined,
+        executedSql: undefined,
+        llmMessage: undefined, // LLM 메시지 초기화
+      },
     }));
 
     try {
-      const currentState = dashboardStates[dashboardId];
-      const q = query ?? currentState.query;
-      const result = await searchDashboard(q);
+      const response = await searchDashboard(currentQuery);
+      console.log('Search response:', response);
+
       setDashboardStates((prev) => ({
         ...prev,
-        [dashboardId]: { ...prev[dashboardId], result, loading: false },
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          result: response.success ? response.data || [] : [],
+          error: response.error ? response.message : undefined,
+          suggestion: response.suggestion,
+          executedSql: response.executedSql,
+          llmMessage: response.llmMessage, // LLM 메시지 저장
+        },
       }));
     } catch (error) {
       console.error('Search error:', error);
       setDashboardStates((prev) => ({
         ...prev,
-        [dashboardId]: { ...prev[dashboardId], result: [], loading: false },
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          error: `검색 중 오류가 발생했습니다: ${
+            error instanceof Error ? error.message : '알 수 없는 오류'
+          }`,
+        },
       }));
     }
   };
@@ -208,7 +274,12 @@ function App() {
     setDashboardStates((prev) => {
       const newStates = { ...prev };
       Object.keys(newStates).forEach((id) => {
-        newStates[Number(id)] = { ...newStates[Number(id)], result: [] };
+        newStates[Number(id)] = {
+          ...newStates[Number(id)],
+          result: [],
+          error: undefined,
+          suggestion: undefined,
+        };
       });
       return newStates;
     });

@@ -25,9 +25,16 @@ export interface SearchRequest {
   query: string;
 }
 
+// 통합된 검색 응답 인터페이스
 export interface SearchResponse {
-  name: string;
-  age: number;
+  success: boolean;
+  data?: (OrderRow | Record<string, unknown>)[];
+  error?: boolean;
+  message?: string;
+  suggestion?: string;
+  executedSql?: string;
+  count?: number;
+  llmMessage?: string; // LLM의 전체 응답 메시지
 }
 
 // 엑셀 업로드 IPC용 타입
