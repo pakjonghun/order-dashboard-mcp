@@ -58,33 +58,16 @@ function Dashboard({
 }: DashboardProps) {
   const { query, result, loading, error, suggestion, executedSql, llmMessage, pagination } = state;
 
+  // 페이지네이션 렌더링 조건 디버깅
+  console.log(`[Dashboard ${dashboardId}] 페이지네이션 상태:`, {
+    pagination: pagination,
+    hasPagination: !!pagination,
+    totalCount: pagination?.totalCount,
+    totalPages: pagination?.totalPages,
+    shouldRender: pagination && pagination.totalCount > 0 && pagination.totalPages > 0,
+  });
+
   console.log(' :result ', result);
-
-  // 페이지네이션용 SQL 업데이트 함수
-  const updateSqlForPage = (sql: string, page: number, pageSize: number): string => {
-    const offset = (page - 1) * pageSize;
-    // 기존 LIMIT/OFFSET 제거하고 새로운 값으로 교체
-    return sql.replace(
-      /\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*;?\s*$/i,
-      ` LIMIT ${pageSize} OFFSET ${offset};`
-    );
-  };
-
-  // SQL 직접 실행 함수
-  const executeSqlDirect = async (
-    sql: string,
-    page: number,
-    pageSize: number
-  ): Promise<SearchResponse> => {
-    const ipcRenderer = window.ipcRenderer;
-    if (!ipcRenderer) throw new Error('ipcRenderer not found');
-
-    return (await ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SQL_DIRECT, {
-      sql,
-      page,
-      pageSize,
-    })) as SearchResponse;
-  };
 
   return (
     <div className="flex flex-col w-full min-w-[600px] flex-1">
@@ -222,7 +205,7 @@ function Dashboard({
           </div>
 
           {/* 페이지네이션 컴포넌트 */}
-          {pagination && pagination.totalCount > 0 && (
+          {pagination && pagination.totalCount > 0 && pagination.totalPages > 0 && (
             <Pagination
               currentPage={pagination.currentPage}
               totalPages={pagination.totalPages}
@@ -317,6 +300,12 @@ function App() {
   // 페이지 변경 핸들러
   const handlePageChange = async (dashboardId: number, page: number) => {
     const state = dashboardStates[dashboardId];
+    console.log(`[handlePageChange] Dashboard ${dashboardId} 시작:`, {
+      page,
+      originalSql: state.originalSql,
+      currentPagination: state.pagination,
+    });
+
     if (!state.originalSql) {
       console.log('원본 SQL이 없습니다. 기존 방식으로 검색합니다.');
       await search(dashboardId, state.query, page, state.pagination?.pageSize);
@@ -325,15 +314,23 @@ function App() {
 
     console.log('페이지 변경:', page, '원본 SQL:', state.originalSql);
 
-    // 로딩 상태 설정
-    setDashboardStates((prev) => ({
-      ...prev,
-      [dashboardId]: {
-        ...prev[dashboardId],
-        loading: true,
-        error: undefined,
-      },
-    }));
+    // 로딩 상태 설정 (기존 pagination 정보 유지)
+    setDashboardStates((prev) => {
+      console.log(`[handlePageChange] 로딩 상태 설정 전:`, {
+        dashboardId,
+        currentPagination: prev[dashboardId].pagination,
+      });
+
+      return {
+        ...prev,
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: true,
+          error: undefined,
+          // pagination 정보는 유지
+        },
+      };
+    });
 
     try {
       // SQL 업데이트
@@ -347,18 +344,35 @@ function App() {
       // 업데이트된 SQL 실행
       const response = await executeSqlDirect(updatedSql, page, state.pagination?.pageSize || 20);
       console.log('SQL 실행 결과:', response);
+      console.log('response.pagination 상세:', {
+        currentPage: response.pagination?.currentPage,
+        pageSize: response.pagination?.pageSize,
+        totalCount: response.pagination?.totalCount,
+        totalPages: response.pagination?.totalPages,
+        hasNextPage: response.pagination?.hasNextPage,
+        hasPreviousPage: response.pagination?.hasPreviousPage,
+      });
 
-      setDashboardStates((prev) => ({
-        ...prev,
-        [dashboardId]: {
-          ...prev[dashboardId],
-          loading: false,
-          result: response.success ? response.data || [] : [],
-          pagination: response.pagination,
-          executedSql: response.executedSql,
-          error: response.error ? response.message : undefined,
-        },
-      }));
+      setDashboardStates((prev) => {
+        console.log(`[handlePageChange] 상태 업데이트:`, {
+          dashboardId,
+          responsePagination: response.pagination,
+          currentPagination: prev[dashboardId].pagination,
+          willUsePagination: response.pagination || prev[dashboardId].pagination,
+        });
+
+        return {
+          ...prev,
+          [dashboardId]: {
+            ...prev[dashboardId],
+            loading: false,
+            result: response.success ? response.data || [] : [],
+            pagination: response.pagination || prev[dashboardId].pagination,
+            executedSql: response.executedSql,
+            error: response.error ? response.message : undefined,
+          },
+        };
+      });
     } catch (error) {
       console.error('페이지 변경 오류:', error);
       setDashboardStates((prev) => ({

@@ -18,23 +18,46 @@ export async function executeSqlTool({
       return { text: JSON.stringify({ error: true, message: 'SELECT 쿼리만 허용됩니다.' }) };
     }
 
-    console.log('실행할 SQL:', sql);
+    // 세미콜론 제거 및 공백 정리
+    const cleanSql = sql.replace(/;?\s*$/, '').trim();
+
+    console.log('실행할 SQL:', cleanSql);
     console.log('페이지:', page, '페이지 크기:', pageSize);
 
-    // 데이터 쿼리 실행 (이미 LIMIT/OFFSET이 포함된 SQL 사용)
-    const stmt = db.prepare(sql);
+    // 데이터 쿼리 실행
+    const stmt = db.prepare(cleanSql);
     const result = stmt.all();
 
     console.log('쿼리 결과 개수:', result.length);
 
-    // 전체 개수 조회를 위한 쿼리 생성 (LIMIT/OFFSET 제거)
-    const cleanSql = sql.replace(/\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*;?\s*$/i, '').trim();
-    const countSql = cleanSql.replace(/SELECT\s+.+?\s+FROM/i, 'SELECT COUNT(*) as total FROM');
-    const countStmt = db.prepare(countSql);
-    const countResult = countStmt.get() as { total: number };
-    const totalCount = countResult.total;
+    // 전체 개수 조회를 위한 쿼리 생성
+    // LIMIT/OFFSET을 먼저 제거한 후 COUNT 쿼리 생성
+    const sqlWithoutLimit = cleanSql.replace(/\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*$/i, '').trim();
 
-    console.log('전체 개수:', totalCount);
+    let countSql: string;
+    if (sqlWithoutLimit.toUpperCase().includes('GROUP BY')) {
+      // GROUP BY가 있는 경우: 서브쿼리로 감싸서 COUNT
+      countSql = `SELECT COUNT(*) as total FROM (${sqlWithoutLimit}) as subquery`;
+    } else {
+      // GROUP BY가 없는 경우: 기존 방식
+      countSql = sqlWithoutLimit.replace(/SELECT\s+.+?\s+FROM/i, 'SELECT COUNT(*) as total FROM');
+    }
+
+    console.log('LIMIT 제거된 SQL:', sqlWithoutLimit);
+    console.log('COUNT 쿼리:', countSql);
+
+    let totalCount = 0;
+    try {
+      const countStmt = db.prepare(countSql);
+      const countResult = countStmt.get() as { total: number };
+      totalCount = countResult?.total || 0;
+      console.log('COUNT 쿼리 결과:', countResult);
+      console.log('전체 개수:', totalCount);
+    } catch (countError) {
+      console.error('COUNT 쿼리 실행 오류:', countError);
+      // COUNT 쿼리 실패 시 현재 결과 개수로 대체
+      totalCount = result.length;
+    }
 
     // 페이지네이션 정보 계산
     const totalPages = Math.ceil(totalCount / pageSize);
@@ -47,12 +70,14 @@ export async function executeSqlTool({
       hasPreviousPage: page > 1,
     };
 
+    console.log('생성된 pagination 정보:', pagination);
+
     return {
       text: JSON.stringify({
         success: true,
         data: result,
         pagination,
-        executedSql: sql,
+        executedSql: cleanSql,
         countSql: countSql,
       }),
     };
