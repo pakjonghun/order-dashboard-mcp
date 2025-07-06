@@ -3,6 +3,7 @@ import { formatDate } from '@dashboard-app/shared';
 import { User } from '@shared/types';
 import { getAllUsers } from './db/database';
 import './handlers/queryHandler';
+import './handlers/uploadHandler';
 import * as path from 'path';
 
 function createWindow() {
