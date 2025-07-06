@@ -2,14 +2,17 @@ import { app, BrowserWindow } from 'electron';
 import { formatDate } from '@dashboard-app/shared';
 import { User } from '@shared/types';
 import { getAllUsers } from './db/database';
+import './handlers/queryHandler';
+import * as path from 'path';
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
