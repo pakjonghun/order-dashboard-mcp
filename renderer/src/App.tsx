@@ -10,15 +10,11 @@ import {
   TableHead,
   TableCell,
 } from './components/ui/table';
-import { type User } from '@shared/types';
-
-const users: User[] = [
-  { id: '1', name: 'John Doe' },
-  { id: '2', name: 'Jane Smith' },
-  { id: '3', name: 'Alice Kim' },
-];
+import { useSearchStore } from './stores/searchStore';
 
 function Dashboard() {
+  const { query, setQuery, search, result, loading } = useSearchStore();
+
   return (
     <div className="flex flex-col items-center gap-10 w-full max-w-2xl">
       <Card className="w-full">
@@ -26,31 +22,53 @@ function Dashboard() {
           <CardTitle>사용자 검색</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-center">
-            <Input placeholder="이름으로 검색" className="flex-1" />
-            <Button>검색</Button>
-          </div>
+          <form
+            className="flex gap-4 items-center"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await search();
+            }}
+          >
+            <Input
+              placeholder="자연어로 검색"
+              className="flex-1"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              disabled={loading}
+            />
+            <Button type="submit" disabled={loading}>
+              {loading ? '검색 중...' : '검색'}
+            </Button>
+          </form>
         </CardContent>
       </Card>
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>사용자 목록</CardTitle>
+          <CardTitle>검색 결과</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>이름</TableHead>
+                <TableHead>나이</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.id}</TableCell>
-                  <TableCell>{user.name}</TableCell>
+              {Array.isArray(result) && result.length > 0 ? (
+                (result as { name: string; age: number }[]).map((row, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{row.name}</TableCell>
+                    <TableCell>{row.age}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground">
+                    결과 없음
+                  </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>
