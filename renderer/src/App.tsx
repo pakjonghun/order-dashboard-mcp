@@ -11,6 +11,8 @@ import {
   TableCell,
 } from './components/ui/table';
 import { useSearchStore } from './stores/searchStore';
+import { UploadModal } from './components/button/upload-modal';
+import { type UploadResponse } from '@shared/types';
 
 function Dashboard() {
   const { query, setQuery, search, result, loading } = useSearchStore();
@@ -84,11 +86,23 @@ function App() {
     setDashboards((prev) => [...prev, prev.length]);
   };
 
+  const handleUploadResult = (result: UploadResponse) => {
+    console.log('Upload result:', result);
+
+    // 타입 안전한 결과 처리
+    if (result.success) {
+      console.log(`성공적으로 ${result.inserted}개 행이 삽입되었습니다.`);
+    } else {
+      console.error('업로드 실패:', result.error);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center py-12 bg-background gap-6">
-      <Button onClick={addDashboard} className="mb-4 self-start ml-8">
-        + 화면 분할
-      </Button>
+      <div className="flex gap-4 mb-4 self-start ml-8">
+        <Button onClick={addDashboard}>+ 화면 분할</Button>
+        <UploadModal onUpload={handleUploadResult} />
+      </div>
       <div className={`flex flex-1 w-full justify-center items-start gap-8`}>
         {dashboards.map((_, idx) => (
           <Dashboard key={idx} />
