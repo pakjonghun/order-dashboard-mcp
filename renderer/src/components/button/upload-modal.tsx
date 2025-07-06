@@ -10,9 +10,8 @@ import {
   DialogTrigger,
 } from '../ui/dialog';
 import { type UploadResponse, type UploadRequest, type ParsedExcelData } from '@shared/types';
-import { IPC_CHANNELS } from '@shared/constants';
+import { IPC_CHANNELS, EXCEL_COLUMN_MAPPING, REQUIRED_COLUMNS } from '@shared/constants';
 import * as XLSX from 'xlsx';
-import { REQUIRED_COLUMNS } from '@shared/constants';
 
 interface UploadModalProps {
   onUpload?: (result: UploadResponse) => void;
@@ -34,6 +33,67 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
   const [parsedData, setParsedData] = React.useState<ParsedExcelData | null>(null);
   const [columnMapping, setColumnMapping] = React.useState<Record<string, string>>({});
   const [headerEditIndex, setHeaderEditIndex] = React.useState<number | null>(null);
+
+  // 자동 컬럼 매핑 함수
+  const autoMapColumns = (excelColumns: string[]): Record<string, string> => {
+    const mapping: Record<string, string> = {};
+    const usedDbColumns = new Set<string>();
+
+    for (const excelCol of excelColumns) {
+      // EXCEL_COLUMN_MAPPING에서 매핑 찾기
+      const dbCol = EXCEL_COLUMN_MAPPING[excelCol as keyof typeof EXCEL_COLUMN_MAPPING];
+
+      if (dbCol && !usedDbColumns.has(dbCol)) {
+        mapping[excelCol] = dbCol;
+        usedDbColumns.add(dbCol);
+      }
+    }
+
+    // 정확한 매칭이 없는 경우 유사도 기반 매핑 시도
+    for (const excelCol of excelColumns) {
+      if (!mapping[excelCol]) {
+        const bestMatch = findBestMatch(
+          excelCol,
+          REQUIRED_COLUMNS.filter((col) => !usedDbColumns.has(col))
+        );
+        if (bestMatch) {
+          mapping[excelCol] = bestMatch;
+          usedDbColumns.add(bestMatch);
+        }
+      }
+    }
+
+    return mapping;
+  };
+
+  // 유사도 기반 매핑 함수
+  const findBestMatch = (excelCol: string, availableDbCols: readonly string[]): string | null => {
+    const normalizedExcelCol = excelCol.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+
+    let bestMatch: string | null = null;
+    let bestScore = 0;
+
+    for (const dbCol of availableDbCols) {
+      const normalizedDbCol = dbCol.toLowerCase();
+
+      // 정확한 포함 관계 확인
+      if (
+        normalizedExcelCol.includes(normalizedDbCol) ||
+        normalizedDbCol.includes(normalizedExcelCol)
+      ) {
+        const score =
+          Math.min(normalizedExcelCol.length, normalizedDbCol.length) /
+          Math.max(normalizedExcelCol.length, normalizedDbCol.length);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = dbCol;
+        }
+      }
+    }
+
+    // 70% 이상 유사도가 있는 경우만 매핑
+    return bestScore > 0.7 ? bestMatch : null;
+  };
 
   const parseExcelFile = async (file: File): Promise<ParsedExcelData> => {
     return new Promise((resolve, reject) => {
@@ -91,10 +151,23 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
       setFile(selectedFile);
       setResult('');
       setParsedData(null);
+      setColumnMapping({}); // 기존 매핑 초기화
+
       try {
         const data = await parseExcelFile(selectedFile);
         setParsedData(data);
-        setResult(`파일 파싱 완료: ${data.columns.length}개 컬럼, ${data.rows.length}개 행`);
+
+        // 자동 컬럼 매핑 실행
+        const autoMapping = autoMapColumns(data.columns);
+        setColumnMapping(autoMapping);
+
+        const mappedCount = Object.keys(autoMapping).length;
+        const requiredCount = REQUIRED_COLUMNS.length;
+
+        setResult(
+          `파일 파싱 완료: ${data.columns.length}개 컬럼, ${data.rows.length}개 행\n` +
+            `자동 매핑: ${mappedCount}/${requiredCount}개 컬럼 매핑됨`
+        );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
         setResult(`파싱 오류: ${errorMessage}`);
@@ -127,11 +200,6 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
     };
     setLoading(true);
     try {
-      // 디버깅: 전송 전 데이터 확인
-      console.log('[Renderer] 전송할 데이터 샘플:', {
-        columns: uploadData.columns,
-        sampleRow: uploadData.rows[0],
-      });
       const ipcRenderer = window.ipcRenderer;
       if (!ipcRenderer) throw new Error('ipcRenderer not found');
       const res = (await ipcRenderer.invoke(
@@ -156,6 +224,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
       setResult('');
       setLoading(false);
       setParsedData(null);
+      setColumnMapping({}); // 매핑도 초기화
     }
   };
 
@@ -198,7 +267,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
                     <span
                       key={dbCol}
                       className={`px-3 py-1 rounded border text-sm font-semibold flex items-center gap-1 ${
-                        mappedExcelCol ? 'bg-green-100 border-green-400 text-green-900' : ''
+                        mappedExcelCol
+                          ? 'bg-green-100 border-green-400 text-green-900'
+                          : 'bg-gray-100 border-gray-300 text-gray-600'
                       }`}
                     >
                       {dbCol}

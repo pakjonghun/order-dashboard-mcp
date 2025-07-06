@@ -10,15 +10,15 @@ import {
   TableHead,
   TableCell,
 } from './components/ui/table';
-import { type UploadResponse, type SearchResponse } from '@shared/types';
-import { IPC_CHANNELS } from '@shared/constants'; // 다시 import
+import { type UploadResponse, type OrderRow } from '@shared/types';
+import { IPC_CHANNELS, DB_COLUMNS } from '@shared/constants';
 import { UploadModal } from './components/button/upload-modal';
 import { ResetButton } from './components/button/reset-button';
 
 // Dashboard별 상태 타입
 interface DashboardState {
   query: string;
-  result: (SearchResponse | Record<string, unknown>)[];
+  result: (OrderRow | Record<string, unknown>)[];
   loading: boolean;
 }
 
@@ -28,19 +28,16 @@ interface DashboardProps {
   state: DashboardState;
   setQuery: (query: string) => void;
   search: (query?: string) => Promise<void>;
-  // clearResult: () => void; // 사용하지 않으므로 제거
 }
 
 function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
   const { query, result, loading } = state;
 
-  console.log('result : ', result);
-
   return (
     <div className="flex flex-col items-center gap-10 w-full max-w-2xl">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>사용자 검색 - Dashboard {dashboardId + 1}</CardTitle>
+          <CardTitle>주문 데이터 검색 - Dashboard {dashboardId + 1}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -71,19 +68,30 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>이름</TableHead>
-                <TableHead>나이</TableHead>
+                {Array.isArray(result) && result.length > 0 && 'orderNumber' in result[0] ? (
+                  // OrderRow 타입인 경우 동적으로 컬럼 생성
+                  DB_COLUMNS.map((column) => <TableHead key={column}>{column}</TableHead>)
+                ) : (
+                  // 기타 JSON 결과인 경우 기본 컬럼
+                  <>
+                    <TableHead>키</TableHead>
+                    <TableHead>값</TableHead>
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {Array.isArray(result) && result.length > 0 ? (
                 result.map((row, idx) => {
-                  if ('name' in row && 'age' in row) {
-                    // 기존 사용자 검색 결과
+                  if ('orderNumber' in row) {
+                    // OrderRow 타입인 경우
                     return (
                       <TableRow key={idx}>
-                        <TableCell>{(row as SearchResponse).name}</TableCell>
-                        <TableCell>{(row as SearchResponse).age}</TableCell>
+                        {DB_COLUMNS.map((column) => (
+                          <TableCell key={column}>
+                            {String(row[column as keyof OrderRow] || '')}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     );
                   } else {
@@ -103,7 +111,10 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={2} className="text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={DB_COLUMNS.length}
+                    className="text-center text-muted-foreground"
+                  >
                     결과 없음
                   </TableCell>
                 </TableRow>
@@ -117,14 +128,12 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
 }
 
 // Dashboard별 검색 함수 분리
-async function searchDashboard(
-  query: string
-): Promise<(SearchResponse | Record<string, unknown>)[]> {
+async function searchDashboard(query: string): Promise<(OrderRow | Record<string, unknown>)[]> {
   const ipcRenderer = window.ipcRenderer;
   if (!ipcRenderer) throw new Error('ipcRenderer not found');
   // MCP 서버 IPC 채널로 자연어 질의
   return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, query)) as (
-    | SearchResponse
+    | OrderRow
     | Record<string, unknown>
   )[];
 }
