@@ -33,60 +33,61 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
   const [parsedData, setParsedData] = React.useState<ParsedExcelData | null>(null);
 
   const parseExcelFile = async (file: File): Promise<ParsedExcelData> => {
-    console.log('[UploadModal] 엑셀 파일 파싱 시작:', file.name);
-
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-
       reader.onload = (e) => {
         try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
+          let workbook;
+          if (file.name.endsWith('.csv')) {
+            // CSV는 텍스트로 읽어서 처리
+            const csvText = e.target?.result as string;
+            workbook = XLSX.read(csvText, {
+              type: 'string',
+              codepage: 65001,
+            });
+          } else {
+            // XLSX 등은 바이너리로 처리
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            workbook = XLSX.read(data, {
+              type: 'array',
+              cellText: true,
+              cellDates: true,
+              cellNF: false,
+              cellStyles: false,
+              raw: false,
+              codepage: 65001,
+            });
+          }
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-
-          // JSON으로 변환
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
-
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+            raw: false,
+            defval: '',
+          }) as Record<string, unknown>[];
           if (jsonData.length === 0) {
             throw new Error('엑셀 파일에 데이터가 없습니다.');
           }
-
-          // 컬럼명 추출 (첫 번째 행의 키들)
           const columns = Object.keys(jsonData[0]);
           const rows = jsonData;
-
-          console.log('[UploadModal] 파싱 완료:', {
-            columns,
-            rowCount: rows.length,
-            sampleRow: rows[0],
-          });
-
           resolve({ columns, rows });
         } catch (error) {
-          console.error('[UploadModal] 엑셀 파싱 오류:', error);
           reject(error);
         }
       };
-
-      reader.onerror = () => {
-        console.error('[UploadModal] 파일 읽기 오류');
-        reject(new Error('파일을 읽을 수 없습니다.'));
-      };
-
-      reader.readAsArrayBuffer(file);
+      if (file.name.endsWith('.csv')) {
+        reader.readAsText(file, 'utf-8');
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
     });
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      console.log('[UploadModal] 파일 선택됨:', selectedFile.name, selectedFile.size);
-
       setFile(selectedFile);
       setResult('');
       setParsedData(null);
-
       try {
         const data = await parseExcelFile(selectedFile);
         setParsedData(data);
@@ -94,55 +95,37 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
         setResult(`파싱 오류: ${errorMessage}`);
-        console.error('[UploadModal] 파일 파싱 실패:', error);
       }
     }
   };
 
   const handleUpload = async () => {
-    if (!file || !parsedData) {
-      console.warn('[UploadModal] 업로드 조건 불충족:', { file: !!file, parsedData: !!parsedData });
-      return;
-    }
-
-    console.log('[UploadModal] 업로드 시작:', file.name);
+    if (!file || !parsedData) return;
     setLoading(true);
-
     try {
       const uploadData: UploadRequest = {
         columns: parsedData.columns,
         rows: parsedData.rows,
       };
 
-      console.log('[UploadModal] 업로드 데이터:', {
+      // 디버깅: 전송 전 데이터 확인
+      console.log('[Renderer] 전송할 데이터 샘플:', {
         columns: uploadData.columns,
-        rowCount: uploadData.rows.length,
         sampleRow: uploadData.rows[0],
+        sampleName: uploadData.rows[0]?.name,
+        sampleNameType: typeof uploadData.rows[0]?.name,
       });
 
       const ipcRenderer = window.ipcRenderer;
-      if (!ipcRenderer) {
-        throw new Error('ipcRenderer not found');
-      }
-
+      if (!ipcRenderer) throw new Error('ipcRenderer not found');
       const res = (await ipcRenderer.invoke(
         IPC_CHANNELS.UPLOAD_EXCEL_DATA,
         uploadData
       )) as UploadResponse;
-
-      console.log('[UploadModal] 업로드 결과:', res);
-
-      const resultText = JSON.stringify(res, null, 2);
-      setResult(resultText);
+      setResult(JSON.stringify(res, null, 2));
       onUpload?.(res);
-
-      // 성공 시 모달 닫기
-      if (res.success) {
-        console.log('[UploadModal] 업로드 성공, 2초 후 모달 닫기');
-        setTimeout(() => setOpen(false), 2000);
-      }
+      if (res.success) setTimeout(() => setOpen(false), 2000);
     } catch (err) {
-      console.error('[UploadModal] 업로드 오류:', err);
       const errorText = '오류: ' + (err instanceof Error ? err.message : String(err));
       setResult(errorText);
     } finally {
@@ -151,10 +134,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    console.log('[UploadModal] 모달 상태 변경:', newOpen);
     setOpen(newOpen);
     if (!newOpen) {
-      // 모달이 닫힐 때 상태 초기화
       setFile(null);
       setResult('');
       setLoading(false);
