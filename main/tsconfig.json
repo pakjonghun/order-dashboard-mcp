@@ -12,5 +12,6 @@
     "typeRoots": ["../shared/dist", "./node_modules/@types"],
     "types": ["jest"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/test"]
 }
