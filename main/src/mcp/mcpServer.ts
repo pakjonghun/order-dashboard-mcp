@@ -39,25 +39,67 @@ export class McpServer {
 
       console.log('Full LLM response:', fullResponse);
 
-      // SQL 코드 블록에서 SQL만 추출
+      // SQL 추출 로직 개선
       let sql = '';
       if (fullResponse) {
+        // 1. SQL 코드 블록에서 추출 시도
         const sqlMatch = fullResponse.match(/```sql\s*([\s\S]*?)\s*```/);
         if (sqlMatch) {
           sql = sqlMatch[1].trim();
         } else {
-          // SQL 코드 블록이 없으면 전체 텍스트에서 SQL 키워드가 있는 부분만 추출
+          // 2. 전체 응답에서 SQL 문장 추출 - 더 간단한 방법
           const lines = fullResponse.split('\n');
+          let sqlLines: string[] = [];
+          let foundSelect = false;
+
           for (const line of lines) {
-            if (
-              line.trim().toUpperCase().includes('SELECT') ||
-              line.trim().toUpperCase().includes('INSERT') ||
-              line.trim().toUpperCase().includes('UPDATE') ||
-              line.trim().toUpperCase().includes('DELETE')
-            ) {
-              sql = line.trim();
-              break;
+            const trimmedLine = line.trim();
+
+            // SELECT로 시작하는 라인 찾기
+            if (trimmedLine.toUpperCase().startsWith('SELECT')) {
+              foundSelect = true;
+              sqlLines.push(trimmedLine);
             }
+            // SELECT 이후의 라인들 추가
+            else if (foundSelect) {
+              // 빈 라인이 아니고, SQL 키워드나 구문이 포함된 라인
+              if (
+                trimmedLine &&
+                (trimmedLine.toUpperCase().includes('FROM') ||
+                  trimmedLine.toUpperCase().includes('WHERE') ||
+                  trimmedLine.toUpperCase().includes('ORDER BY') ||
+                  trimmedLine.toUpperCase().includes('GROUP BY') ||
+                  trimmedLine.toUpperCase().includes('HAVING') ||
+                  trimmedLine.toUpperCase().includes('LIMIT') ||
+                  trimmedLine.toUpperCase().includes('JOIN') ||
+                  trimmedLine.toUpperCase().includes('UNION') ||
+                  trimmedLine.includes(',') ||
+                  trimmedLine.includes('(') ||
+                  trimmedLine.includes(')') ||
+                  trimmedLine.includes(';'))
+              ) {
+                sqlLines.push(trimmedLine);
+                // 세미콜론으로 끝나면 종료
+                if (trimmedLine.includes(';')) {
+                  break;
+                }
+              }
+              // 빈 라인도 추가 (SQL 포맷팅용)
+              else if (trimmedLine === '') {
+                sqlLines.push(trimmedLine);
+              }
+              // SQL이 아닌 다른 내용이 나오면 종료
+              else if (trimmedLine && !trimmedLine.match(/^[A-Z\s,()*.'"`-]+$/)) {
+                break;
+              }
+            }
+          }
+
+          sql = sqlLines.join(' ').replace(/\s+/g, ' ').trim();
+
+          // 세미콜론이 없으면 추가
+          if (sql && !sql.endsWith(';')) {
+            sql += ';';
           }
         }
       }
@@ -66,6 +108,7 @@ export class McpServer {
       if (!sql) {
         return { error: true, message: 'LLM이 SQL을 생성하지 못했습니다.' };
       }
+
       // 5. SQL 실행
       const execRes = await executeSqlTool({ sql });
       console.log('execRes : ', execRes);

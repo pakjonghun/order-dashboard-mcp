@@ -1,4 +1,20 @@
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS orders (
+  address TEXT,
+  barcode TEXT,
+  invoiceNumber TEXT,
+  message TEXT,
+  orderStatus TEXT,
+  postalCode TEXT,
+  customerName TEXT NOT NULL,
+  client TEXT,
+  orderNumber TEXT PRIMARY KEY,
+  totalAmount REAL,
+  settlementAmount REAL,
+  quantity INTEGER,
+  cost REAL,
+  productCode TEXT,
+  productName TEXT NOT NULL,
+  orderDate TEXT,
+  shoppingMallId TEXT,
+  phoneNumber TEXT
 ); 

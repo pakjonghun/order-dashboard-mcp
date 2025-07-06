@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { formatDate } from '@dashboard-app/shared';
-import { User } from '@shared/types';
-import { getAllUsers } from './db/database';
+import { OrderRow } from '@shared/types';
+import { getAllOrders } from './db/database';
 import './config/env';
 import './handlers/queryHandler';
 import './handlers/uploadHandler';
@@ -23,7 +23,7 @@ function createWindow() {
   win.loadURL('http://localhost:3000');
 
   console.log('[Electron] App started at', formatDate(new Date()));
-  console.log('[Electron] Users in DB:', getAllUsers());
+  console.log('[Electron] Orders in DB:', getAllOrders());
 }
 
 app.whenReady().then(createWindow);
@@ -33,8 +33,24 @@ app.on('window-all-closed', () => {
 });
 
 function abc() {
-  const user: User = {
-    id: '1',
-    name: 'John Doe',
+  const order: OrderRow = {
+    address: '서울시 강남구',
+    barcode: '1234567890123',
+    invoiceNumber: 'INV-001',
+    message: '부재시 경비실',
+    orderStatus: '배송중',
+    postalCode: '06123',
+    customerName: '김철수',
+    client: '네이버쇼핑',
+    orderNumber: 'ORD-001',
+    totalAmount: 150000,
+    settlementAmount: 135000,
+    quantity: 2,
+    cost: 50000,
+    productCode: 'PROD-001',
+    productName: '스마트폰 케이스',
+    orderDate: '2024-01-15',
+    shoppingMallId: 'NAVER-001',
+    phoneNumber: '010-1234-5678',
   };
 }

@@ -1,6 +1,23 @@
-export interface User {
-  id: string;
-  name: string;
+// 주문 데이터 인터페이스
+export interface OrderRow {
+  address: string;
+  barcode: string;
+  invoiceNumber: string;
+  message: string;
+  orderStatus: string;
+  postalCode: string;
+  customerName: string;
+  client: string;
+  orderNumber: string;
+  totalAmount: number;
+  settlementAmount: number;
+  quantity: number;
+  cost: number;
+  productCode: string;
+  productName: string;
+  orderDate: string;
+  shoppingMallId: string;
+  phoneNumber: string;
 }
 
 // 자연어 검색 IPC용 타입

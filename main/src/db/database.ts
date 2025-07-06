@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import type { User } from '../../../shared/src/types';
+import type { OrderRow } from '../../../shared/src/types';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fs = require('fs');
@@ -15,9 +15,9 @@ const db = new Database(dbFile);
 const schema = fs.readFileSync(schemaPath, 'utf-8');
 db.exec(schema);
 
-// 사용자 전체 조회 쿼리
-function getAllUsers(): User[] {
-  return db.prepare('SELECT * FROM users').all() as User[];
+// 주문 전체 조회 쿼리
+function getAllOrders(): OrderRow[] {
+  return db.prepare('SELECT * FROM orders').all() as OrderRow[];
 }
 
-export { db, getAllUsers };
+export { db, getAllOrders };

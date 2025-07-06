@@ -8,7 +8,7 @@ ipcMain.handle(
   IPC_CHANNELS.RESET_ALL_DATA,
   async (_event, _req: ResetRequest): Promise<ResetResponse> => {
     try {
-      db.prepare('DELETE FROM users').run();
+      db.prepare('DELETE FROM orders').run();
       return { success: true };
     } catch (error: unknown) {
       let message = 'Unknown error';

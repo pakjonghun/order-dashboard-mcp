@@ -1,13 +1,13 @@
-import { getAllUsers } from '../db/database';
+import { getAllOrders } from '../db/database';
 
-describe('DB User Query', () => {
-  it('should return an array (users)', () => {
-    const users = getAllUsers();
-    expect(Array.isArray(users)).toBe(true);
+describe('DB Order Query', () => {
+  it('should return an array (orders)', () => {
+    const orders = getAllOrders();
+    expect(Array.isArray(orders)).toBe(true);
   });
 
-  it('should return empty array if no users', () => {
-    const users = getAllUsers();
-    expect(users.length).toBe(0);
+  it('should return empty array if no orders', () => {
+    const orders = getAllOrders();
+    expect(orders.length).toBe(0);
   });
 });

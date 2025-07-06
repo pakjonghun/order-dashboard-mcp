@@ -3,8 +3,9 @@ import {
   IPC_CHANNELS,
   EXCEL_COLUMN_MAPPING,
   REQUIRED_COLUMNS,
+  DB_COLUMNS,
 } from '../../../shared/src/constants';
-import { UploadRequest, UploadResponse } from '../../../shared/src/types';
+import { UploadRequest, UploadResponse, OrderRow } from '../../../shared/src/types';
 const { db } = require('../db/database');
 
 // 엑셀 헤더를 DB 컬럼명으로 매핑하는 함수
@@ -27,7 +28,7 @@ function validateRequiredColumns(mapping: Record<string, string>): boolean {
   return REQUIRED_COLUMNS.every((col) => mappedColumns.includes(col));
 }
 
-// 핸들러: 엑셀 데이터 JSON 받아서 users 테이블에 저장
+// 핸들러: 엑셀 데이터 JSON 받아서 orders 테이블에 저장
 ipcMain.handle(
   IPC_CHANNELS.UPLOAD_EXCEL_DATA,
   async (_event, payload: UploadRequest): Promise<UploadResponse> => {
@@ -37,8 +38,6 @@ ipcMain.handle(
     console.log('[Main] 받은 데이터 샘플:', {
       columns,
       sampleRow: rows[0],
-      sampleName: rows[0]?.name,
-      sampleNameType: typeof rows[0]?.name,
     });
 
     console.log('[Main] 엑셀 업로드 요청 받음:', {
@@ -76,38 +75,33 @@ ipcMain.handle(
 
       console.log('[Main] DB 삽입 시작');
 
-      const insert = db.prepare('INSERT INTO users (id, name) VALUES (?, ?)');
+      // orders 테이블에 삽입할 컬럼들 준비
+      const orderColumns = DB_COLUMNS.join(', ');
+      const placeholders = DB_COLUMNS.map(() => '?').join(', ');
+      const insert = db.prepare(`INSERT INTO orders (${orderColumns}) VALUES (${placeholders})`);
 
       const insertMany = db.transaction((records: Record<string, unknown>[]) => {
         for (const row of records) {
           // 매핑된 컬럼을 사용하여 데이터 추출
-          let id = '';
-          let name = '';
+          const orderData: Record<string, any> = {};
 
           for (const [excelCol, dbCol] of Object.entries(columnMapping)) {
-            if (dbCol === 'id') {
-              id = String(row[excelCol] || '');
-            } else if (dbCol === 'name') {
-              let rawName = String(row[excelCol] || '');
-              // 한글이 깨진 경우 복원 시도
-              let fixedName = rawName;
-              try {
-                if (/\\x/.test(rawName) || /%/.test(rawName)) {
-                  fixedName = decodeURIComponent(escape(rawName));
-                }
-              } catch (e) {
-                // 복원 실패 시 원본 사용
-                fixedName = rawName;
+            const value = row[excelCol];
+            if (value !== undefined && value !== null) {
+              // 숫자 필드 처리
+              if (['totalAmount', 'settlementAmount', 'quantity', 'cost'].includes(dbCol)) {
+                (orderData as Record<string, any>)[dbCol] = Number(value || 0);
+              } else {
+                (orderData as Record<string, any>)[dbCol] = String(value);
               }
-              name = fixedName;
             }
           }
 
-          // 디버깅: 실제 DB에 들어가는 값 확인
-          console.log('[Main] DB에 저장할 데이터:', { id, name });
-
-          if (id && name) {
-            insert.run(id, name);
+          // 필수 필드가 있는지 확인
+          if (orderData.orderNumber && orderData.customerName && orderData.productName) {
+            // DB_COLUMNS 순서대로 값 배열 생성
+            const values = DB_COLUMNS.map((col) => orderData[col as keyof OrderRow] || '');
+            insert.run(...values);
           }
         }
       });
