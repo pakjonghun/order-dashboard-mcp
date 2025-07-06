@@ -12,6 +12,7 @@ import {
 import { type UploadResponse, type UploadRequest, type ParsedExcelData } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/constants';
 import * as XLSX from 'xlsx';
+import { REQUIRED_COLUMNS } from '@shared/constants';
 
 interface UploadModalProps {
   onUpload?: (result: UploadResponse) => void;
@@ -31,6 +32,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [parsedData, setParsedData] = React.useState<ParsedExcelData | null>(null);
+  const [columnMapping, setColumnMapping] = React.useState<Record<string, string>>({});
+  const [headerEditIndex, setHeaderEditIndex] = React.useState<number | null>(null);
 
   const parseExcelFile = async (file: File): Promise<ParsedExcelData> => {
     return new Promise((resolve, reject) => {
@@ -101,21 +104,34 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
 
   const handleUpload = async () => {
     if (!file || !parsedData) return;
+    // 매핑된 컬럼만 추출, DB 컬럼명 기준으로 변환
+    const mappedCols = REQUIRED_COLUMNS.filter((dbCol) =>
+      Object.values(columnMapping).includes(dbCol)
+    );
+    // 엑셀 헤더 → DB 컬럼 매핑 역전
+    const excelToDbMap: Record<string, string> = {};
+    Object.entries(columnMapping).forEach(([excelCol, dbCol]) => {
+      if (dbCol) excelToDbMap[excelCol] = dbCol;
+    });
+    // rows 변환
+    const mappedRows = parsedData.rows.map((row) => {
+      const newRow: Record<string, unknown> = {};
+      Object.entries(excelToDbMap).forEach(([excelCol, dbCol]) => {
+        newRow[dbCol] = row[excelCol];
+      });
+      return newRow;
+    });
+    const uploadData: UploadRequest = {
+      columns: mappedCols,
+      rows: mappedRows,
+    };
     setLoading(true);
     try {
-      const uploadData: UploadRequest = {
-        columns: parsedData.columns,
-        rows: parsedData.rows,
-      };
-
       // 디버깅: 전송 전 데이터 확인
       console.log('[Renderer] 전송할 데이터 샘플:', {
         columns: uploadData.columns,
         sampleRow: uploadData.rows[0],
-        sampleName: uploadData.rows[0]?.name,
-        sampleNameType: typeof uploadData.rows[0]?.name,
       });
-
       const ipcRenderer = window.ipcRenderer;
       if (!ipcRenderer) throw new Error('ipcRenderer not found');
       const res = (await ipcRenderer.invoke(
@@ -143,6 +159,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
     }
   };
 
+  const allMapped = REQUIRED_COLUMNS.every((dbCol) => Object.values(columnMapping).includes(dbCol));
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -167,10 +185,108 @@ const UploadModal: React.FC<UploadModalProps> = ({ onUpload }) => {
               </div>
             )}
           </div>
+          {parsedData && (
+            <div className="space-y-4">
+              {/* 1. 상단 DB 컬럼 배지 리스트 */}
+              <div className="flex flex-wrap gap-2 bg-white p-2 rounded border mb-2">
+                {REQUIRED_COLUMNS.map((dbCol) => {
+                  // 매핑된 엑셀 헤더 찾기
+                  const mappedExcelCol = Object.entries(columnMapping).find(
+                    ([, v]) => v === dbCol
+                  )?.[0];
+                  return (
+                    <span
+                      key={dbCol}
+                      className={`px-3 py-1 rounded border text-sm font-semibold flex items-center gap-1 ${
+                        mappedExcelCol ? 'bg-green-100 border-green-400 text-green-900' : ''
+                      }`}
+                    >
+                      {dbCol}
+                      {mappedExcelCol && (
+                        <button
+                          type="button"
+                          className="ml-1 text-green-900 hover:text-red-500 text-xs font-bold focus:outline-none"
+                          onClick={() => {
+                            // 매핑 해제: columnMapping에서 해당 엑셀 헤더의 매핑을 삭제
+                            setColumnMapping((prev) => {
+                              const newMap = { ...prev };
+                              delete newMap[mappedExcelCol];
+                              return newMap;
+                            });
+                          }}
+                          aria-label="매핑 해제"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+              {/* 2. 엑셀 데이터 테이블 (헤더 + 5줄) */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full border text-sm">
+                  <thead>
+                    <tr>
+                      {parsedData.columns.map((col, idx) => (
+                        <th
+                          key={col}
+                          className={`border px-2 py-1 bg-gray-50 cursor-pointer relative ${
+                            columnMapping[col] ? 'bg-green-100 text-green-900' : ''
+                          }`}
+                          onClick={() => setHeaderEditIndex(idx)}
+                        >
+                          {headerEditIndex === idx ? (
+                            <select
+                              autoFocus
+                              className="border rounded px-1 py-0.5 text-xs"
+                              value={columnMapping[col] || ''}
+                              onChange={(e) => {
+                                const newDbCol = e.target.value;
+                                setColumnMapping((prev) => ({ ...prev, [col]: newDbCol }));
+                                setHeaderEditIndex(null);
+                              }}
+                              onBlur={() => setHeaderEditIndex(null)}
+                            >
+                              <option value="">매핑 선택</option>
+                              {REQUIRED_COLUMNS.filter((dbCol) => {
+                                // 이미 매핑된 DB 컬럼은 선택지에서 제외(단, 현재 이 셀렉터에서 선택된 값은 포함)
+                                const alreadyMapped = Object.entries(columnMapping).some(
+                                  ([c, v]) => v === dbCol && c !== col
+                                );
+                                return !alreadyMapped;
+                              }).map((dbCol) => (
+                                <option key={dbCol} value={dbCol}>
+                                  {dbCol}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            columnMapping[col] || col
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedData.rows.slice(0, 5).map((row, ridx) => (
+                      <tr key={ridx}>
+                        {parsedData.columns.map((col) => (
+                          <td key={col} className="border px-2 py-1">
+                            {row[col] as string}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <Button
             onClick={handleUpload}
-            disabled={!file || !parsedData || loading}
-            className="w-full"
+            disabled={!file || !parsedData || loading || !allMapped}
+            className="w-32"
           >
             {loading ? '업로드 중...' : '업로드'}
           </Button>
