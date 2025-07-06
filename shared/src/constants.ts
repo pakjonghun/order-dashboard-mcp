@@ -3,6 +3,7 @@ export const IPC_CHANNELS = {
   UPLOAD_EXCEL_DATA: 'excel:upload-to-db',
   RESET_ALL_DATA: 'db:reset-all',
   MCP_GENERATE_SQL: 'mcp:generate-sql', // 추가
+  EXECUTE_SQL_DIRECT: 'execute:sql-direct', // 추가
 };
 
 // 주문 데이터 컬럼 목록

@@ -3,12 +3,42 @@ import { systemPrompt } from './systemPrompt';
 import { getDbSchemaTool } from './tools/getDbSchemaTool';
 import { getMcpPromptTool } from './tools/getMcpPromptTool';
 import { executeSqlTool } from './tools/executeSqlTool';
-import { SearchResponse } from '../../../shared/src/types';
+import { SearchResponse, SearchRequest } from '../../../shared/src/types';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export class McpServer {
-  async generate(prompt: string): Promise<SearchResponse> {
+  async generate(prompt: string, page: number = 1, pageSize: number = 20): Promise<SearchResponse> {
+    // SQL 직접 실행인지 확인
+    if (prompt.startsWith('EXECUTE_SQL: ')) {
+      const sql = prompt.replace('EXECUTE_SQL: ', '');
+      const execRes = await executeSqlTool({ sql, page, pageSize });
+
+      try {
+        const result = JSON.parse(execRes.text);
+        if (result.error) {
+          return {
+            success: false,
+            error: true,
+            message: result.message,
+          };
+        }
+
+        return {
+          success: true,
+          data: result.data || [],
+          executedSql: result.executedSql,
+          pagination: result.pagination,
+        };
+      } catch {
+        return {
+          success: false,
+          error: true,
+          message: 'SQL 실행 중 오류가 발생했습니다.',
+        };
+      }
+    }
+
     // API 키 확인
     console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
     console.log('API Key length:', process.env.ANTHROPIC_API_KEY?.length);
@@ -119,8 +149,8 @@ export class McpServer {
         };
       }
 
-      // 5. SQL 실행
-      const execRes = await executeSqlTool({ sql });
+      // 5. SQL 실행 (페이지네이션 적용)
+      const execRes = await executeSqlTool({ sql, page, pageSize });
       console.log('execRes : ', execRes);
 
       try {
@@ -137,25 +167,13 @@ export class McpServer {
           };
         }
 
-        // 결과가 배열이고 비어있는 경우
-        if (Array.isArray(result) && result.length === 0) {
-          return {
-            success: false,
-            error: true,
-            message: '검색 결과가 없습니다.',
-            suggestion:
-              '다른 검색 조건을 시도해보세요. 예시: "전체 주문 데이터", "다른 고객명으로 검색"',
-            executedSql: sql,
-            llmMessage: fullResponse,
-          };
-        }
-
-        // 정상 결과인 경우
+        // 정상 결과인 경우 (페이지네이션 정보 포함)
         return {
           success: true,
-          data: result,
-          executedSql: sql,
-          count: Array.isArray(result) ? result.length : 1,
+          data: result.data || [],
+          executedSql: result.executedSql || sql,
+          count: result.data?.length || 0,
+          pagination: result.pagination,
           llmMessage: fullResponse,
         };
       } catch {

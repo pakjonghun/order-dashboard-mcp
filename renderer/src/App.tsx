@@ -10,14 +10,20 @@ import {
   TableHead,
   TableCell,
 } from './components/ui/table';
-import { type UploadResponse, type OrderRow, type SearchResponse } from '@shared/types';
+import { Pagination } from './components/ui/pagination';
+import {
+  type UploadResponse,
+  type OrderRow,
+  type SearchResponse,
+  type PaginationInfo,
+} from '@shared/types';
 import { IPC_CHANNELS, DB_COLUMNS } from '@shared/constants';
 import { UploadModal } from './components/button/upload-modal';
 import { ResetButton } from './components/button/reset-button';
 import { X, AlertCircle, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-// Dashboard별 상태 타입
+// Dashboard별 상태에 원본 SQL 저장
 interface DashboardState {
   query: string;
   result: (OrderRow | Record<string, unknown>)[];
@@ -25,7 +31,9 @@ interface DashboardState {
   error?: string;
   suggestion?: string;
   executedSql?: string;
-  llmMessage?: string; // LLM의 전체 응답 메시지 추가
+  llmMessage?: string;
+  pagination?: PaginationInfo;
+  originalSql?: string; // LLM이 생성한 원본 SQL 저장
 }
 
 // Dashboard 컴포넌트에 props 추가
@@ -33,12 +41,50 @@ interface DashboardProps {
   dashboardId: number;
   state: DashboardState;
   setQuery: (query: string) => void;
-  search: (query?: string) => Promise<void>;
+  search: (query?: string, page?: number, pageSize?: number) => Promise<void>;
   onDelete: () => void;
+  onPageChange: (page: number) => Promise<void>; // 추가
+  onPageSizeChange: (pageSize: number) => Promise<void>; // 추가
 }
 
-function Dashboard({ dashboardId, state, setQuery, search, onDelete }: DashboardProps) {
-  const { query, result, loading, error, suggestion, executedSql, llmMessage } = state;
+function Dashboard({
+  dashboardId,
+  state,
+  setQuery,
+  search,
+  onDelete,
+  onPageChange,
+  onPageSizeChange,
+}: DashboardProps) {
+  const { query, result, loading, error, suggestion, executedSql, llmMessage, pagination } = state;
+
+  console.log(' :result ', result);
+
+  // 페이지네이션용 SQL 업데이트 함수
+  const updateSqlForPage = (sql: string, page: number, pageSize: number): string => {
+    const offset = (page - 1) * pageSize;
+    // 기존 LIMIT/OFFSET 제거하고 새로운 값으로 교체
+    return sql.replace(
+      /\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*;?\s*$/i,
+      ` LIMIT ${pageSize} OFFSET ${offset};`
+    );
+  };
+
+  // SQL 직접 실행 함수
+  const executeSqlDirect = async (
+    sql: string,
+    page: number,
+    pageSize: number
+  ): Promise<SearchResponse> => {
+    const ipcRenderer = window.ipcRenderer;
+    if (!ipcRenderer) throw new Error('ipcRenderer not found');
+
+    return (await ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SQL_DIRECT, {
+      sql,
+      page,
+      pageSize,
+    })) as SearchResponse;
+  };
 
   return (
     <div className="flex flex-col w-full min-w-[600px] flex-1">
@@ -61,7 +107,7 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
             className="flex gap-4 items-center"
             onSubmit={async (e) => {
               e.preventDefault();
-              await search();
+              await search(query, 1, pagination?.pageSize || 20); // 검색 시 첫 페이지로 이동
             }}
           >
             <Input
@@ -174,6 +220,19 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
               </TableBody>
             </Table>
           </div>
+
+          {/* 페이지네이션 컴포넌트 */}
+          {pagination && pagination.totalCount > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalCount={pagination.totalCount}
+              pageSize={pagination.pageSize}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+              className="mt-4"
+            />
+          )}
         </CardContent>
       </Card>
     </div>
@@ -181,11 +240,19 @@ function Dashboard({ dashboardId, state, setQuery, search, onDelete }: Dashboard
 }
 
 // Dashboard별 검색 함수 분리
-async function searchDashboard(query: string): Promise<SearchResponse> {
+async function searchDashboard(
+  query: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<SearchResponse> {
   const ipcRenderer = window.ipcRenderer;
   if (!ipcRenderer) throw new Error('ipcRenderer not found');
-  // MCP 서버 IPC 채널로 자연어 질의
-  return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, query)) as SearchResponse;
+  // MCP 서버 IPC 채널로 자연어 질의 (페이지네이션 파라미터 포함)
+  return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, {
+    query,
+    page,
+    pageSize,
+  })) as SearchResponse;
 }
 
 function App() {
@@ -221,7 +288,155 @@ function App() {
     }));
   };
 
-  const search = async (dashboardId: number, query?: string) => {
+  // 페이지네이션용 SQL 업데이트 함수
+  const updateSqlForPage = (sql: string, page: number, pageSize: number): string => {
+    const offset = (page - 1) * pageSize;
+    // 기존 LIMIT/OFFSET 제거하고 새로운 값으로 교체
+    return sql.replace(
+      /\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*;?\s*$/i,
+      ` LIMIT ${pageSize} OFFSET ${offset};`
+    );
+  };
+
+  // SQL 직접 실행 함수
+  const executeSqlDirect = async (
+    sql: string,
+    page: number,
+    pageSize: number
+  ): Promise<SearchResponse> => {
+    const ipcRenderer = window.ipcRenderer;
+    if (!ipcRenderer) throw new Error('ipcRenderer not found');
+
+    return (await ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SQL_DIRECT, {
+      sql,
+      page,
+      pageSize,
+    })) as SearchResponse;
+  };
+
+  // 페이지 변경 핸들러
+  const handlePageChange = async (dashboardId: number, page: number) => {
+    const state = dashboardStates[dashboardId];
+    if (!state.originalSql) {
+      console.log('원본 SQL이 없습니다. 기존 방식으로 검색합니다.');
+      await search(dashboardId, state.query, page, state.pagination?.pageSize);
+      return;
+    }
+
+    console.log('페이지 변경:', page, '원본 SQL:', state.originalSql);
+
+    // 로딩 상태 설정
+    setDashboardStates((prev) => ({
+      ...prev,
+      [dashboardId]: {
+        ...prev[dashboardId],
+        loading: true,
+        error: undefined,
+      },
+    }));
+
+    try {
+      // SQL 업데이트
+      const updatedSql = updateSqlForPage(
+        state.originalSql,
+        page,
+        state.pagination?.pageSize || 20
+      );
+      console.log('업데이트된 SQL:', updatedSql);
+
+      // 업데이트된 SQL 실행
+      const response = await executeSqlDirect(updatedSql, page, state.pagination?.pageSize || 20);
+      console.log('SQL 실행 결과:', response);
+
+      setDashboardStates((prev) => ({
+        ...prev,
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          result: response.success ? response.data || [] : [],
+          pagination: response.pagination,
+          executedSql: response.executedSql,
+          error: response.error ? response.message : undefined,
+        },
+      }));
+    } catch (error) {
+      console.error('페이지 변경 오류:', error);
+      setDashboardStates((prev) => ({
+        ...prev,
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          error: `페이지 변경 중 오류가 발생했습니다: ${
+            error instanceof Error ? error.message : '알 수 없는 오류'
+          }`,
+        },
+      }));
+    }
+  };
+
+  // 페이지 크기 변경 핸들러
+  const handlePageSizeChange = async (dashboardId: number, pageSize: number) => {
+    const state = dashboardStates[dashboardId];
+
+    if (!state.originalSql) {
+      console.log('원본 SQL이 없습니다. 기존 방식으로 검색합니다.');
+      await search(dashboardId, state.query, 1, pageSize);
+      return;
+    }
+
+    console.log('페이지 크기 변경:', pageSize, '원본 SQL:', state.originalSql);
+
+    // 로딩 상태 설정
+    setDashboardStates((prev) => ({
+      ...prev,
+      [dashboardId]: {
+        ...prev[dashboardId],
+        loading: true,
+        error: undefined,
+      },
+    }));
+
+    try {
+      // SQL 업데이트 (첫 페이지로 이동)
+      const updatedSql = updateSqlForPage(state.originalSql, 1, pageSize);
+      console.log('업데이트된 SQL (페이지 크기 변경):', updatedSql);
+
+      // 업데이트된 SQL 실행
+      const response = await executeSqlDirect(updatedSql, 1, pageSize);
+      console.log('SQL 실행 결과 (페이지 크기 변경):', response);
+
+      setDashboardStates((prev) => ({
+        ...prev,
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          result: response.success ? response.data || [] : [],
+          pagination: response.pagination,
+          executedSql: response.executedSql,
+          error: response.error ? response.message : undefined,
+        },
+      }));
+    } catch (error) {
+      console.error('페이지 크기 변경 오류:', error);
+      setDashboardStates((prev) => ({
+        ...prev,
+        [dashboardId]: {
+          ...prev[dashboardId],
+          loading: false,
+          error: `페이지 크기 변경 중 오류가 발생했습니다: ${
+            error instanceof Error ? error.message : '알 수 없는 오류'
+          }`,
+        },
+      }));
+    }
+  };
+
+  const search = async (
+    dashboardId: number,
+    query?: string,
+    page: number = 1,
+    pageSize: number = 20
+  ) => {
     const currentQuery = query || dashboardStates[dashboardId]?.query || '';
     if (!currentQuery.trim()) return;
 
@@ -239,7 +454,7 @@ function App() {
     }));
 
     try {
-      const response = await searchDashboard(currentQuery);
+      const response = await searchDashboard(currentQuery, page, pageSize);
       console.log('Search response:', response);
 
       setDashboardStates((prev) => ({
@@ -252,6 +467,8 @@ function App() {
           suggestion: response.suggestion,
           executedSql: response.executedSql,
           llmMessage: response.llmMessage, // LLM 메시지 저장
+          pagination: response.pagination, // 페이지네이션 정보 저장
+          originalSql: response.executedSql, // LLM이 생성한 SQL 저장
         },
       }));
     } catch (error) {
@@ -279,6 +496,7 @@ function App() {
           result: [],
           error: undefined,
           suggestion: undefined,
+          pagination: undefined,
         };
       });
       return newStates;
@@ -313,8 +531,10 @@ function App() {
             dashboardId={dashboardId}
             state={dashboardStates[dashboardId]}
             setQuery={(query) => setQuery(dashboardId, query)}
-            search={(query) => search(dashboardId, query)}
+            search={(query, page, pageSize) => search(dashboardId, query, page, pageSize)}
             onDelete={() => deleteDashboard(dashboardId)}
+            onPageChange={(page) => handlePageChange(dashboardId, page)}
+            onPageSizeChange={(pageSize) => handlePageSizeChange(dashboardId, pageSize)}
           />
         ))}
       </div>
