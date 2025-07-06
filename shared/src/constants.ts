@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   QUERY_FROM_NL: 'query:from-nl',
   UPLOAD_EXCEL_DATA: 'excel:upload-to-db',
   RESET_ALL_DATA: 'db:reset-all',
+  MCP_GENERATE_SQL: 'mcp:generate-sql', // 추가
 };
 
 // 엑셀 컬럼 매핑 설정

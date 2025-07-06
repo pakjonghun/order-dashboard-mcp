@@ -11,14 +11,14 @@ import {
   TableCell,
 } from './components/ui/table';
 import { type UploadResponse, type SearchResponse } from '@shared/types';
-import { IPC_CHANNELS } from '@shared/constants';
+import { IPC_CHANNELS } from '@shared/constants'; // 다시 import
 import { UploadModal } from './components/button/upload-modal';
 import { ResetButton } from './components/button/reset-button';
 
 // Dashboard별 상태 타입
 interface DashboardState {
   query: string;
-  result: SearchResponse[];
+  result: (SearchResponse | Record<string, unknown>)[];
   loading: boolean;
 }
 
@@ -33,6 +33,8 @@ interface DashboardProps {
 
 function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
   const { query, result, loading } = state;
+
+  console.log('result : ', result);
 
   return (
     <div className="flex flex-col items-center gap-10 w-full max-w-2xl">
@@ -75,12 +77,30 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
             </TableHeader>
             <TableBody>
               {Array.isArray(result) && result.length > 0 ? (
-                (result as { name: string; age: number }[]).map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell>{row.age}</TableCell>
-                  </TableRow>
-                ))
+                result.map((row, idx) => {
+                  if ('name' in row && 'age' in row) {
+                    // 기존 사용자 검색 결과
+                    return (
+                      <TableRow key={idx}>
+                        <TableCell>{(row as SearchResponse).name}</TableCell>
+                        <TableCell>{(row as SearchResponse).age}</TableCell>
+                      </TableRow>
+                    );
+                  } else {
+                    // 기타 JSON 결과(동적 key-value)
+                    return (
+                      <TableRow key={idx}>
+                        <TableCell colSpan={2}>
+                          {Object.entries(row).map(([k, v]) => (
+                            <div key={k}>
+                              <b>{k}:</b> {String(v)}
+                            </div>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={2} className="text-center text-muted-foreground">
@@ -97,11 +117,16 @@ function Dashboard({ dashboardId, state, setQuery, search }: DashboardProps) {
 }
 
 // Dashboard별 검색 함수 분리
-async function searchDashboard(query: string): Promise<SearchResponse[]> {
+async function searchDashboard(
+  query: string
+): Promise<(SearchResponse | Record<string, unknown>)[]> {
   const ipcRenderer = window.ipcRenderer;
   if (!ipcRenderer) throw new Error('ipcRenderer not found');
-  const req = { query };
-  return (await ipcRenderer.invoke(IPC_CHANNELS.QUERY_FROM_NL, req)) as SearchResponse[];
+  // MCP 서버 IPC 채널로 자연어 질의
+  return (await ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_SQL, query)) as (
+    | SearchResponse
+    | Record<string, unknown>
+  )[];
 }
 
 function App() {

@@ -8,7 +8,7 @@
     "shared"
   ],
   "scripts": {
-    "dev": "npm run build:shared && npm run build:main && concurrently \"npm run dev:renderer\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
+    "dev": "npm run rebuild:main && npm run build:shared && npm run build:main && concurrently \"npm run dev:renderer\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
     "dev:main": "npm run dev --workspace=main",
     "dev:renderer": "npm run dev --workspace=renderer",
     "dev:electron": "NODE_ENV=development electron .",
@@ -16,7 +16,8 @@
     "build:main": "npm run build --workspace=main",
     "build:renderer": "npm run build --workspace=renderer",
     "build:shared": "npm run build --workspace=shared",
-    "start": "electron ."
+    "start": "electron .",
+    "rebuild:main": "cd main && npx electron-rebuild"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

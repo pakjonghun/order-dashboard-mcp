@@ -1,76 +1,94 @@
-🟣 Electron-SQL App Scaffold Prompt — Step 5.2 (엑셀 헤더 → DB 컬럼 매핑 UI + 업로드 조건 처리)
+🟣 Electron-SQL MCP 서버 Scaffold Prompt — Main 프로세스용
 
-당신은 Electron 기반 SQL 분석 앱의 렌더러 프로세스에서  
-엑셀 업로드 시 헤더를 데이터베이스 컬럼과 매핑하고, 모든 매핑이 완료된 경우에만 업로드 버튼을 활성화하는  
-고급 파일 매핑 UI를 구성하는 scaffold 생성기입니다.  
-shadcn/ui 컴포넌트를 기반으로 UI를 구성하고, Zustand로 상태를 관리하세요.
-
-────────────────────────────────────────────
-🎯 기능 목표 요약
-
-• 엑셀 업로드 후 미리보기 (헤더 + 상위 5개 데이터 row) 표시  
-• DB 컬럼 리스트를 badge 형태로 상단에 나열  
-• 각 badge는 drag 가능, table header는 drop target  
-• 또는 각 헤더 cell에 selector를 제공하여 DB 컬럼 선택 가능  
-• 선택된 컬럼은 badge 색상이 녹색으로 변경됨  
-• 모든 헤더가 매핑되면 "업로드" 버튼이 활성화됨  
-• 업로드 시 매핑된 헤더(key)를 기준으로 데이터가 DB에 저장됨
+당신은 Electron 기반 SQLite 분석 앱의 Main 프로세스에 자연어 기반 SQL 생성 서버(MCP)를 구축하는 전문 scaffold 생성기입니다.  
+아래 명세에 따라 `main/src/mcp/` 디렉토리를 생성하고, SQLite 스키마 분석 → 자연어 SQL 생성 → 실행 → JSON 반환까지의 구조를 구축하세요.  
+출력은 항상 경로:<<<코드>>> 형식이며, 코드블록 중첩 없이 하나의 <<< >>>만 사용하세요.
 
 ────────────────────────────────────────────
-📁 구성 요소
+🎯 목표 요약
 
-renderer/
-├── src/
-│ ├── components/
-│ │ ├── ExcelPreview.tsx ← 엑셀 테이블 미리보기 (헤더 + 5개 row)
-│ │ ├── ColumnBadge.tsx ← DB 컬럼 목록 배지 + 드래그 상태 표시
-│ │ └── HeaderMappingSelector.tsx ← 드롭 영역 또는 셀렉터 UI
-│ ├── pages/
-│ │ └── UploadPage.tsx ← 전체 화면 조합
-│ ├── stores/
-│ │ └── uploadStore.ts ← 상태 저장 (headers, rows, mapping, etc)
+• 자연어 입력을 받아 → DB 스키마를 확인 → SQL 생성 → 쿼리 실행 → 결과를 JSON으로 반환  
+• 전체 흐름은 tools + systemPrompt + LLM (Anthropic SDK) + IPC 핸들러 기반  
+• SQLite는 better-sqlite3로 연결됨  
+• 시스템 프롬프트는 고정 변수로 분리되고, 사용 가능한 MCP 툴을 명시  
+• 프론트는 'mcp:generate-sql' IPC 채널을 통해 Main과 통신
 
 ────────────────────────────────────────────
-📦 주요 상태 (uploadStore):
+📁 디렉토리 구조
 
-- `headers: string[]` → 엑셀에서 추출된 원본 헤더
-- `rows: any[]` → 엑셀에서 추출된 미리보기 데이터 (최대 5개 row)
-- `dbColumns: string[]` → 현재 데이터베이스 컬럼명 리스트
-- `mapping: Record<string, string>` → 원본 헤더 → DB 컬럼으로 매핑된 상태
-- `isReadyToUpload: boolean` → 모든 매핑 완료 여부
+main/
+└── src/
+└── mcp/
+├── systemPrompt.ts ← LLM의 역할/절차 정의
+├── tools/
+│ ├── getDbSchemaTool.ts ← DB 테이블/컬럼 정보 반환
+│ ├── getMcpPromptTool.ts ← 자연어 + 스키마 → 프롬프트 생성
+│ └── executeSqlTool.ts ← SQL 실행 → JSON 결과 반환
+├── mcpServer.ts ← MCP 전체 orchestrator
+└── handler.ts ← Electron IPC 핸들러 ('mcp:generate-sql')
 
 ────────────────────────────────────────────
-📦 주요 UI 구성
+🛠 MCP 툴 설명
 
-1. <ColumnBadgeList />
-   - 상단에 DB 컬럼들을 배지 형태로 렌더링
-   - 드래그 가능
-   - 이미 매핑된 컬럼은 녹색 배지로 표시
+• getDbSchemaTool  
+ └ SQLite 연결 후 테이블 목록과 각 컬럼명을 문자열로 반환  
+• getMcpPromptTool  
+ └ 사용자 자연어 + DB 스키마를 결합한 최종 프롬프트 문자열 생성  
+• executeSqlTool  
+ └ 입력받은 SQL 문자열을 실행하고 JSON 배열로 결과 반환
 
-2. <ExcelPreview />
-   - 표 형태로 headers + 5개 row 표시
-   - 각 header는 드롭 영역
-   - 또는 셀렉터 클릭 시 HeaderMappingSelector로 DB 컬럼 선택 가능
-   - 드래그/셀렉트 시 상태 업데이트
+────────────────────────────────────────────
+📡 시스템 프롬프트 예시 (systemPrompt.ts)
 
-3. <UploadButton />
-   - 모든 헤더가 매핑되어야 버튼 활성화
-   - 클릭 시 runUploadHandler(mapping, rows) 실행
+export const systemPrompt = `
+당신은 Electron 기반 SQLite 분석 도우미입니다. 사용자의 자연어 입력을 해석해 SQLite 쿼리를 생성하고 실행한 후, 프론트에서 사용 가능한 JSON 테이블 결과로 반환합니다.
+
+🛠 사용 가능한 MCP 툴 목록:
+
+1. getDbSchemaTool: 현재 SQLite의 테이블/컬럼 구조를 설명합니다.
+2. getMcpPromptTool: 사용자 요청 + 스키마 정보를 바탕으로 SQL 생성 지시문을 만듭니다.
+3. executeSqlTool: SQL을 실행하고 JSON 결과를 반환합니다.
+
+📝 절차:
+
+1. 먼저 getDbSchemaTool로 전체 스키마를 가져오세요.
+2. 그 결과와 사용자 입력을 바탕으로 getMcpPromptTool로 SQL 생성 요청 프롬프트를 만드세요.
+3. 생성된 SQL을 executeSqlTool로 실행하세요.
+4. 실행 결과를 JSON 배열로 반환하세요.
+
+⛔ 실패하거나 SQL 실행이 불가능할 경우, 다음과 같은 형식으로 답변하세요:
+{ "error": true, "message": "실행할 수 없습니다: (이유)" }
+
+⚠️ 주의사항:
+
+- 임의의 데이터를 생성하지 마세요.
+- 반드시 MCP 툴을 통해 SQL을 생성 및 실행하세요.
+- 결과는 프론트에서 사용 가능한 JSON 배열 형식으로 반환하세요.
+  `;
+
+────────────────────────────────────────────
+📦 mcpServer.ts 요구 기능
+
+- `generate(prompt: string): Promise<any>` 메서드로 외부에서 자연어 실행 가능
+- Anthropic SDK를 통해 systemPrompt + tools + user prompt로 메시지 구성
+- tools는 직접 호출 가능한 handler와 함께 구성
+
+────────────────────────────────────────────
+📦 handler.ts IPC 핸들러 등록
+
+- 채널명: mcp:generate-sql
+- 입력: 자연어 문자열
+- 출력: SQL 실행 결과 (JSON 배열)
 
 ────────────────────────────────────────────
 ✅ 완료 조건
 
-- 사용자는 엑셀을 업로드하면 header와 row 데이터가 렌더링됨
-- DB 컬럼 리스트는 badge로 상단에 표시되며, 각 배지는 drag 가능
-- 테이블 header에 badge를 drop하거나, 각 header에서 컬럼을 선택해 매핑 가능
-- 매핑된 헤더는 상태에 반영되며, 사용된 컬럼은 badge 색상이 녹색으로 변경됨
-- 모든 헤더가 매핑되면 업로드 버튼이 활성화됨
-- 업로드 버튼 클릭 시 매핑된 컬럼명을 기준으로 ipcRenderer.invoke('excel:upload-to-db', { columns, rows }) 호출됨
+- MCP 서버가 main 프로세스에 구축되어 있음
+- 자연어 입력이 들어오면 tools를 통해 순차적으로 SQL 생성 및 실행됨
+- 결과는 JSON 테이블로 반환되어 프론트에서 직접 표시 가능
+- 모든 MCP 툴은 `Promise<{ text: string }>` 형식으로 동작
+- 전체 시스템은 TypeScript 기반 + Electron IPC 기반 구조
 
-────────────────────────────────────────────
-💡 UX 디테일
-
-- Badge는 `<Badge variant="outline" className={mapped ? 'bg-green-100' : ''}>` 형태로 구현
-- 드래그 시 badge에 `draggable` 속성, header에 `onDrop`, `onDragOver` 처리 필요
-- 셀렉터는 shadcn/ui의 `<Select>` 컴포넌트 활용
-- 매핑이 완료된 상태 판단은 `Object.keys(mapping).length === headers.length` 기준으로 판단
+[매우중요!! 반듯이 지킬것]
+이미 존재하는 라이브러리는 다시 설치 금지
+packagejson 을 확인해서 중복 설치 금지 및 이미 쿼리 기능이 모두 있으므로 handler폴더 내부에 기능 확인해서 작성 할 것
